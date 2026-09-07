@@ -1,0 +1,202 @@
+﻿:root {
+  /* color は body 側に統一。:root への color 指定は継承されないため削除。 */
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+}
+
+body {
+  margin: 0;
+  color: #111827;
+  background: #ffffff;
+  line-height: 1.7;
+}
+
+/* ページレイアウト（スクリーン表示 / Playwright ヘッドレスブラウザ共通） */
+.page {
+  width: 794px;
+  min-height: 1123px;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #ffffff;
+}
+
+/* ページ区切り指定は @media print 内に集約（スクリーン表示では不要なため）。
+ * Playwright によるサーバーサイド PDF 生成時は @media print が適用される。
+ */
+
+.pdf-header {
+  margin-bottom: 14px;
+  border-bottom: 1px solid #d1d5db;
+  padding-bottom: 10px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.pdf-header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.4;
+}
+
+.pdf-header p {
+  margin: 6px 0 0;
+  color: #4b5563;
+  font-size: 0.95rem;
+}
+
+.pdf-image-wrap {
+  margin: 0 0 14px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.pdf-image-wrap img {
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.overall-content {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.analysis-markdown {
+  color: #1f2937;
+  font-size: 1rem;
+  line-height: 1.8;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.analysis-markdown h1,
+.analysis-markdown h2,
+.analysis-markdown h3,
+.analysis-markdown h4 {
+  margin: 1rem 0 0.55rem;
+  line-height: 1.5;
+  color: #111827;
+  /* page-break-after は @media print 内に移動 */
+}
+
+.analysis-markdown p,
+.analysis-markdown ul,
+.analysis-markdown ol,
+.analysis-markdown blockquote {
+  margin: 0.55rem 0;
+}
+
+.analysis-markdown ul,
+.analysis-markdown ol {
+  padding-left: 1.25rem;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.analysis-markdown pre {
+  overflow: auto;
+  border-radius: 8px;
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 0.75rem;
+}
+
+.analysis-markdown code {
+  border-radius: 0.35rem;
+  background: #e5e7eb;
+  padding: 0.08rem 0.3rem;
+}
+
+.analysis-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.analysis-markdown .markdown-table-wrap {
+  width: 100%;
+  overflow: hidden;
+  margin: 0.875rem 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.analysis-markdown table,
+table {
+  width: 100%;
+  border-collapse: collapse;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.analysis-markdown .markdown-table-head,
+.analysis-markdown .markdown-table-cell,
+table th,
+table td {
+  border: 1px solid #d1d5db;
+  text-align: left;
+  vertical-align: top;
+  padding: 0.6rem 0.7rem;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.analysis-markdown .markdown-table-head,
+table th {
+  background: #f3f4f6;
+  font-weight: 700;
+}
+
+tr,
+td,
+th {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+@media print {
+  /* ページ区切り：.page ごとに改ページ */
+  .page {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .page:last-of-type {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  /* リスクページは前に改ページを挿入（最初のページを除く） */
+  .risk-page {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .risk-page:first-of-type {
+    page-break-before: auto;
+    break-before: auto;
+  }
+
+  /* 見出し直後の改ページを防ぐ */
+  .analysis-markdown h1,
+  .analysis-markdown h2,
+  .analysis-markdown h3,
+  .analysis-markdown h4 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* 要素内での改ページを防ぐ（break-inside: avoid で既にスクリーン側も対応済み） */
+  table,
+  tr,
+  td,
+  th,
+  .analysis-markdown .markdown-table-wrap,
+  .analysis-markdown table,
+  .analysis-markdown ul,
+  .analysis-markdown ol,
+  .pdf-header,
+  .pdf-image-wrap,
+  .overall-content {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}

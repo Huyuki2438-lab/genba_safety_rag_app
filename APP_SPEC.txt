@@ -1,0 +1,241 @@
+================================================================================
+  現場安全RAGアプリ (genba_safety_rag_app) — 起動方法・仕様書
+  更新日: 2026-05-22
+================================================================================
+
+------------------------------------------------------------------------
+1. アプリ概要
+------------------------------------------------------------------------
+建設現場の写真をアップロードし、AI（Gemini / Vertex AI）が危険予知（KY）
+分析を行うWebアプリケーション。
+
+  - フロントエンド : React 19 + TypeScript + Vite + Tailwind CSS
+  - バックエンド   : Python / FastAPI + Uvicorn
+  - AI             : Google Gemini API または Vertex AI API
+  - PDF出力        : Playwright (Chromium)
+
+------------------------------------------------------------------------
+2. ディレクトリ構成（主要部分）
+------------------------------------------------------------------------
+genba_safety_rag_app/
+├── main.py                          FastAPI エントリーポイント
+├── .env                             環境変数（APIキー等）
+├── requirements.txt                 Python 依存パッケージ
+├── package.json                     Node.js 依存パッケージ
+├── backend/
+│   └── app/
+│       ├── api/
+│       │   ├── ui.py                ルートHTML配信 (dist/index.html)
+│       │   ├── router.py            APIルーター集約
+│       │   └── v1/
+│       │       ├── analysis.py      POST /api/v1/analyze
+│       │       ├── history.py       GET/PUT /api/v1/history
+│       │       ├── pdf.py           POST /api/v1/pdf
+│       │       └── settings.py      GET /api/v1/settings
+│       ├── core/
+│       │   ├── ai/
+│       │   │   ├── base.py          AIBase 抽象クラス（_post_json/_extract_text共通実装）
+│       │   │   ├── factory.py       AIFactory
+│       │   │   └── providers/
+│       │   │       ├── gemini.py    Gemini APIプロバイダー
+│       │   │       └── vertex.py    Vertex AI プロバイダー
+│       │   ├── config.py            Settings (pydantic-settings)
+│       │   ├── parser/
+│       │   │   └── analysis_parser.py  Markdownテーブル → KikenFactor変換
+│       │   └── prompts/
+│       │       └── templates/
+│       │           ├── kiken_yochi_system.jinja2  システムプロンプト
+│       │           └── kiken_yochi_user.jinja2    ユーザープロンプト
+│       ├── repositories/
+│       │   └── history_repository.py  履歴ファイルIO専任
+│       ├── schemas/                 Pydanticスキーマ定義
+│       └── services/
+│           ├── analysis_service.py  分析ロジック
+│           ├── history_service.py   履歴管理ビジネスロジック
+│           ├── target_service.py    AI target設定解決
+│           └── template_service.py  Jinja2テンプレート + PDF CSS注入
+├── src/                             フロントエンドソース (React)
+│   ├── constants/
+│   │   ├── aiProviders.ts           AIモード定義・メタ情報
+│   │   ├── endpoints.ts             APIエンドポイント定数（一元管理）
+│   │   └── safetyModels.ts          デフォルトモデル定義
+│   ├── hooks/
+│   │   └── useGeminiSafetyAnalysis.ts  分析・履歴管理カスタムフック
+│   ├── lib/
+│   │   ├── analyzeSafetyImage.ts    バックエンドAPI呼び出し（常にサーバー経由）
+│   │   ├── analysisHistoryApi.ts    履歴API呼び出し
+│   │   └── providers/
+│   │       ├── providerRuntime.ts   設定状態・RuntimeConfig解決
+│   │       └── providerUtils.ts     共通ユーティリティ
+│   ├── utils/
+│   │   └── formatTimestamp.ts       日時フォーマット関数
+│   └── types/                       TypeScript型定義
+├── dist/                            Viteビルド出力（本番配信）
+├── history/                         分析履歴保存ディレクトリ（自動生成）
+├── static/
+│   └── pdf.css                      PDF出力用スタイル
+└── templates/
+    └── report.html                  PDFレポートテンプレート
+
+------------------------------------------------------------------------
+3. 環境変数（.env）
+------------------------------------------------------------------------
+.env をプロジェクトルートに作成する。
+
+  DEFAULT_AI_TARGET=gemini_a          # デフォルト使用ターゲット
+
+  # Gemini メイン (KY)
+  GEMINI_A_API_KEY=<APIキー>
+  GEMINI_A_MODEL=gemini-2.5-flash
+
+  # Gemini 予備 (KY予備)
+  GEMINI_B_API_KEY=<APIキー>
+  GEMINI_B_MODEL=gemini-2.5-flash
+
+  # Vertex AI
+  VERTEX_API_KEY=<APIキー>
+  VERTEX_MODEL=gemini-2.5-flash
+  VERTEX_PROJECT_ID=<GCPプロジェクトID>
+  VERTEX_LOCATION=us-central1
+
+  ※ 使用しないターゲットのキーは空でも構わない。
+     未設定のターゲットはUI上で「設定不足」と表示されて選択不可になる。
+
+------------------------------------------------------------------------
+4. 初回セットアップ
+------------------------------------------------------------------------
+
+【Python環境】
+  cd genba_safety_rag_app
+  python -m venv .venv
+  .venv\Scripts\activate          # Windows
+  # source .venv/bin/activate     # Mac/Linux
+  pip install -r requirements.txt
+
+  # PDF出力を使う場合 Chromium のインストールが必要
+  .venv\Scripts\playwright.exe install chromium
+
+【Node.js環境】
+  node のバージョン: 18以上推奨
+  npm install
+
+------------------------------------------------------------------------
+5. 起動方法
+------------------------------------------------------------------------
+
+【開発モード（フロントエンド + バックエンド 同時起動）】
+
+  npm run dev
+
+  → フロントエンド: http://localhost:5173  (Vite dev server)
+  → バックエンド  : http://127.0.0.1:8000  (Uvicorn)
+  → Vite が /api/* /analyze /pdf を 8000 番にプロキシ
+
+  ※ バックエンドのホット・ポートを変える場合:
+    BACKEND_HOST=0.0.0.0 BACKEND_PORT=9000 BACKEND_RELOAD=1 npm run dev
+
+【バックエンドのみ起動（本番ビルド済みフロントエンドを使用）】
+
+  npm run dev:backend
+  # または ホットリロードあり:
+  npm run dev:backend:reload
+
+  → http://127.0.0.1:8000 でフロントエンド（dist/index.html）も配信される
+
+【フロントエンドのみ起動】
+
+  npm run dev:frontend
+
+【本番ビルド】
+
+  npm run build
+  # dist/ が生成される。あとは npm run dev:backend で配信。
+
+------------------------------------------------------------------------
+6. APIエンドポイント一覧
+------------------------------------------------------------------------
+
+  POST   /api/v1/analyze           画像分析実行
+  GET    /api/v1/settings          AI設定・有効ターゲット一覧取得
+  GET    /api/v1/history           分析履歴取得（最大20件）
+  PUT    /api/v1/history           分析履歴保存・更新
+  POST   /api/v1/pdf               HTMLからPDF生成・ダウンロード
+  GET    /                         フロントエンドHTML（dist/index.html）
+
+  ※ /static/*  : PDF用CSS等の静的ファイル
+     /history/* : 保存済み画像等の履歴ファイル
+     /assets/*  : Reactビルド成果物 (JS/CSS)
+
+------------------------------------------------------------------------
+7. 分析フロー
+------------------------------------------------------------------------
+
+  1. ユーザーが画像を選択してUIで「分析」ボタンを押す
+  2. フロントエンドが POST /api/v1/analyze に画像(base64) + targetを送信
+  3. バックエンドが Jinja2テンプレートからプロンプトを生成
+     （フロントエンドから渡された prompt / system_instruction は使用しない）
+  4. GeminiProvider または VertexProvider が AI APIを呼び出す
+  5. Markdownレスポンスをパースし KikenFactor（リスク要約表）を抽出
+  6. レスポンスをフロントエンドに返す
+  7. フロントエンドが PUT /api/v1/history で履歴を保存
+  8. UIにMarkdown・リスク表・HTML形式で表示
+
+------------------------------------------------------------------------
+8. AI ターゲット定義
+------------------------------------------------------------------------
+
+  ターゲットID  表示名      種別      概要
+  -----------  ---------  -------  ----------------------------
+  gemini_a     KY          gemini   Gemini APIメイン
+  gemini_b     KY予備      gemini   Gemini API予備
+  vertex       VERTEX      vertex   Vertex AI
+
+  デフォルトは .env の DEFAULT_AI_TARGET で指定（省略時: gemini_a）。
+
+------------------------------------------------------------------------
+9. 分析レポート出力フォーマット
+------------------------------------------------------------------------
+
+  AIは以下のセクション構成でMarkdownを出力する。
+
+  [SECTION:OVERALL]   # 1. 総合評価
+  [SECTION:SUMMARY]   # 2. リスク要約表（No / リスク項目 / 危険な理由 / 重大度 / 推奨対策）
+  [SECTION:RISKS]     # 3. 詳細リスク（観察事項 / 想定される事故 / 重大度の根拠）
+  [SECTION:SOLUTIONS] # 4. 是正計画（即時対応 / 中期対応）
+  [SECTION:ADDITIONAL]# 5. 補足事項
+
+  重大度: 高（死亡・重傷の可能性）/ 中（負傷の可能性）/ 低（軽微な危険）
+
+------------------------------------------------------------------------
+10. 履歴保存仕様
+------------------------------------------------------------------------
+
+  - 保存場所 : history/ ディレクトリ（最大20件）
+  - フォルダ名: 令和年月日時分秒_<IDサフィックス8桁>
+                例) 令和8年04月10日16時20分10秒_087c1738/
+  - 保存内容 : analysis.json（分析結果）+ 画像ファイル
+  - インデックス: history/analysis_history.json
+
+------------------------------------------------------------------------
+11. PDF出力仕様
+------------------------------------------------------------------------
+
+  - エンジン    : Playwright (Chromium)
+  - サイズ      : A4
+  - マージン    : 上下左右 10mm
+  - テンプレート: templates/report.html + static/pdf.css
+  - ファイル名  : 安全分析レポート_YYYYMMDD_HHMMSS.pdf
+
+  ※ Chromiumが未インストールの場合は HTTP 500 が返る。
+    .venv\Scripts\playwright.exe install chromium を実行すること。
+
+------------------------------------------------------------------------
+12. 注意事項
+------------------------------------------------------------------------
+
+  - .env ファイルは Git にコミットしないこと（APIキーが含まれるため）
+  - vite.config.ts の proxy に /analyze /pdf が残っている（旧パス互換）
+    → 将来的に削除可能（フロントエンドはすべて /api/v1/* に統一済み）
+  - dist/ はビルドが必要。未ビルドの場合 npm run build を実行すること
+
+================================================================================

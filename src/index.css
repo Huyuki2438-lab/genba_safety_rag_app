@@ -1,0 +1,794 @@
+﻿@import "tailwindcss";
+
+:root {
+  --accent: #0b63d6;
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --surface-muted: #f7f8fa;
+  --border: #cfd5dd;
+  --text: #111827;
+  --text-muted: #4b5563;
+
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  color: var(--text);
+  background-color: var(--bg);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.app-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.app-header__inner {
+  width: min(1360px, 100% - 48px);
+  margin: 0 auto;
+  padding: 14px 0 16px;
+}
+
+.app-header__title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.app-header__subtitle {
+  margin: 6px 0 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.app-main {
+  width: min(1360px, 100% - 48px);
+  margin: 0 auto;
+  padding: 22px 0 24px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.status-bar {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 66px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.status-item--mode {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.status-item__label {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.status-item__value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+}
+
+.status-item__value--mono {
+  font-family: "Fira Mono", "Consolas", monospace;
+  font-size: 0.9rem;
+}
+
+.mode-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mode-chip.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.main-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 30% 70%;
+  gap: 24px;
+  align-items: start;
+}
+
+.operation-column,
+.result-column {
+  min-height: 0;
+}
+
+.operation-column {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.result-column {
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.result-column::-webkit-scrollbar {
+  width: 9px;
+}
+
+.result-column::-webkit-scrollbar-thumb {
+  background: #bcc4ce;
+  border-radius: 999px;
+}
+
+.upload-panel,
+.analyze-panel,
+.result-frame {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 1.22rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.panel-description {
+  margin: 8px 0 0;
+  font-size: 0.98rem;
+  color: var(--text-muted);
+}
+
+.upload-dropzone {
+  margin-top: 14px;
+  border: 2px dashed #b7bfca;
+  border-radius: 14px;
+  background: var(--surface-muted);
+  padding: 12px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.upload-dropzone.is-drag-active {
+  border-color: #6b7280;
+  background: #eef1f4;
+}
+
+.upload-dropzone__empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 1rem;
+}
+
+.upload-dropzone__content {
+  display: grid;
+  gap: 10px;
+}
+
+.upload-preview {
+  display: block;
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.upload-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.upload-filename {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-clear-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 0 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.secondary-button {
+  margin-top: 14px;
+  width: 100%;
+  min-height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.analyze-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.analyze-button {
+  width: 100%;
+  min-height: 74px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+
+.analyze-button:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.result-frame {
+  display: grid;
+  gap: 14px;
+  background: var(--surface-muted);
+}
+
+.result-frame__header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.preview-surface {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+/* TODO: モバイルプレビュー機能は未実装。
+ * DevicePreviewFrame.tsx では現在 is-pc クラスのみ使用しており、
+ * is-mobile を付与するコードは存在しない。
+ * types/ui.ts の PreviewMode = "pc" | "mobile" 型定義と合わせて、
+ * 将来モバイルプレビュー切り替えUIを実装した際に有効化すること。
+ */
+.preview-surface.is-mobile,
+.report-surface.is-mobile {
+  max-width: 420px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.preview-surface__image {
+  display: block;
+  width: 100%;
+  height: 280px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.preview-surface__empty {
+  height: 280px;
+  border-radius: 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #e3e7ed 0,
+    #e3e7ed 14px,
+    #f0f3f7 14px,
+    #f0f3f7 28px
+  );
+}
+
+.result-tabs {
+  display: grid;
+  gap: 12px;
+}
+
+.result-tabs__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.report-surface {
+  width: 100%;
+}
+
+.result-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.result-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.result-tab.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.result-save-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.result-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.history-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.history-picker__select {
+  min-width: 230px;
+  max-width: 320px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  cursor: pointer;
+}
+
+.history-picker:has(.history-picker__select:disabled) {
+  opacity: 0.62;
+}
+
+.history-picker__select:disabled {
+  cursor: not-allowed;
+}
+
+.result-save-button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.report-panel {
+  min-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.report-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 1rem;
+  background: #f3f4f6;
+  color: var(--text);
+}
+
+/* ローディング状態：グレー系（ベースと同色だが明示的に定義） */
+.report-status--loading {
+  background: #f3f4f6;
+  color: var(--text-muted);
+}
+
+/* エラー状態：赤系 */
+.report-status--error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.report-status p {
+  margin: 0;
+}
+
+.report-empty {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.report-sections {
+  display: grid;
+  gap: 14px;
+}
+
+.report-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  padding: 12px;
+}
+
+.report-section__title {
+  margin: 0 0 8px;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* ホバー・アクティブ状態のインタラクションスタイル */
+.mode-chip:not(.is-selected):hover {
+  background: #e9ecf0;
+  border-color: #b0b8c4;
+}
+
+.mode-chip:not(.is-selected):active {
+  background: #dde1e7;
+}
+
+.result-tab:not(.is-active):hover {
+  background: #f0f3f7;
+  border-color: #b0b8c4;
+}
+
+.result-tab:not(.is-active):active {
+  background: #e5e9ef;
+}
+
+.analyze-button:not(:disabled):hover {
+  background: #0952b3;
+}
+
+.analyze-button:not(:disabled):active {
+  background: #0845a0;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: #f0f3f7;
+  border-color: #b0b8c4;
+}
+
+.secondary-button:active:not(:disabled) {
+  background: #e5e9ef;
+}
+
+.upload-clear-button:hover {
+  background: #f0f3f7;
+  border-color: #b0b8c4;
+}
+
+.result-save-button:not(:disabled):hover {
+  background: #f0f3f7;
+  border-color: #b0b8c4;
+}
+
+/* フォーカスリング（キーボード操作時のアクセシビリティ） */
+.mode-chip:focus-visible,
+.result-tab:focus-visible,
+.result-save-button:focus-visible,
+.history-picker__select:focus-visible,
+.analyze-button:focus-visible,
+.secondary-button:focus-visible,
+.upload-clear-button:focus-visible {
+  outline: 2px solid #1f2937;
+  outline-offset: 2px;
+}
+
+@media (max-width: 1180px) {
+  .status-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-shell {
+    min-height: 100vh;
+    height: auto;
+    overflow: visible;
+  }
+
+  .app-header__inner,
+  .app-main {
+    width: min(1360px, 100% - 24px);
+  }
+
+  .app-main {
+    min-height: auto;
+    padding: 18px 0 24px;
+  }
+
+  .main-grid {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .result-column {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .preview-surface__image,
+  .preview-surface__empty {
+    height: 240px;
+  }
+}
+
+@media (max-width: 640px) {
+  .status-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .app-header__title {
+    font-size: 1.25rem;
+  }
+
+  .mode-chip,
+  .result-tab,
+  .result-save-button,
+  .history-picker,
+  .secondary-button,
+  .upload-clear-button {
+    min-height: 44px;
+    font-size: 0.94rem;
+  }
+
+  .history-picker__select {
+    min-width: 170px;
+    max-width: 220px;
+  }
+
+  .analyze-button {
+    min-height: 64px;
+    font-size: 1.04rem;
+  }
+}
+
+/* .analysis-markdown: Markdownレンダリング結果のスタイル
+ * 以前は @layer components 内に配置していたが、他のコンポーネントクラスと
+ * レイヤー管理を統一するためレイヤー外に移動した。
+ * Tailwind ユーティリティクラスとの優先度競合が生じる場合は再検討すること。
+ */
+.analysis-markdown {
+  color: #1f2937;
+  line-height: 1.85;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.analysis-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.analysis-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.analysis-markdown h1,
+.analysis-markdown h2,
+.analysis-markdown h3,
+.analysis-markdown h4 {
+  margin: 1rem 0 0.625rem;
+  color: #111827;
+  line-height: 1.5;
+  font-weight: 800;
+}
+
+.analysis-markdown h1 {
+  font-size: 1.24rem;
+}
+
+.analysis-markdown h2 {
+  font-size: 1.14rem;
+}
+
+.analysis-markdown h3,
+.analysis-markdown h4 {
+  font-size: 1.05rem;
+}
+
+.analysis-markdown p,
+.analysis-markdown ul,
+.analysis-markdown ol,
+.analysis-markdown blockquote {
+  margin: 0.625rem 0;
+}
+
+.analysis-markdown ul,
+.analysis-markdown ol {
+  padding-left: 1.25rem;
+}
+
+.analysis-markdown li {
+  margin: 0.25rem 0;
+}
+
+.analysis-markdown code {
+  border-radius: 0.4rem;
+  background: #e5e7eb;
+  padding: 0.125rem 0.35rem;
+  font-size: 0.9em;
+}
+
+.analysis-markdown pre {
+  overflow: auto;
+  border-radius: 0.75rem;
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 0.9rem;
+  line-height: 1.7;
+}
+
+.analysis-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.analysis-markdown .markdown-link {
+  color: #111827;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.analysis-markdown .markdown-table-wrap {
+  margin: 0.875rem 0;
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #d1d5db;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.analysis-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  table-layout: auto;
+}
+
+.analysis-markdown .markdown-table-head,
+.analysis-markdown .markdown-table-cell {
+  border: 1px solid #d1d5db;
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.analysis-markdown .markdown-table-head {
+  background: #f3f4f6;
+  font-weight: 800;
+  color: #111827;
+}
+
+.analysis-markdown table th:nth-child(1),
+.analysis-markdown table td:nth-child(1),
+.analysis-markdown table th:nth-child(4),
+.analysis-markdown table td:nth-child(4) {
+  white-space: nowrap;
+  word-break: keep-all;
+}

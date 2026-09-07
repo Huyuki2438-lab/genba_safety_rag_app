@@ -1,0 +1,19 @@
+﻿<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "現場安全 危険分析レポート" }}</title>
+    <!--
+      CSSは意図的にここに書いていない。
+      backend/app/services/template_service.py の render_template_for_pdf() が
+      static/pdf.css の内容を style タグとしてインライン注入する仕組みのため、
+      link タグ（stylesheet）は不要。
+      このファイルを単体でブラウザ表示するとスタイルが当たらないが、
+      それは仕様通り（PDF生成サーバーを経由して使う前提）。
+    -->
+  </head>
+  <body>
+    {{ body_html | safe }}
+  </body>
+</html>

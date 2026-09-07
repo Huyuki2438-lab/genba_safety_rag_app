@@ -7,3 +7,8 @@ python-dotenv
 playwright
 requests
 tzdata
+
+# デスクトップアプリ化 (desktop_app.py) 用
+pywebview
+pythonnet
+pyinstaller

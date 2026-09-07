@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Literal
 from dotenv import load_dotenv
@@ -8,8 +9,21 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+def _compute_base_dir() -> Path:
+    """アプリの基準ディレクトリを求める。
+
+    PyInstaller (onedir) でexe化した場合、__file__ はビルド内部の展開先を
+    指してしまうため、実際にexeが置かれているフォルダ(ネットワーク共有上の
+    UNCパス等も含む)を基準にする必要がある。
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
 # Base Path を計算
-BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+BASE_DIR = _compute_base_dir()
 
 # .env を明示的に読み込んで os.environ に展開
 load_dotenv(BASE_DIR / ".env")
@@ -44,7 +58,7 @@ class TargetConfig(BaseModel):
 
 class Settings(BaseSettings):
     # Base Path (genba_safety_rag_app/)
-    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent.parent
+    BASE_DIR: Path = BASE_DIR
 
     # App Settings
     APP_NAME: str = "Genba Safety RAG App"

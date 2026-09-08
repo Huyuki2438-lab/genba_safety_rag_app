@@ -5,6 +5,30 @@ dist
 .env
 .env.*
 !.env.example
+!.env.shared.example
 .venv
 build
 pw-browsers
+
+# Local-only runtime data. Keep the empty history directory as a repository
+# template, but never version analysis records, source photos, or reports.
+/history/*
+!/history/.gitkeep
+/data/photos/
+
+# Local configuration and generated working files.
+*.local.*
+*.tmp
+*.temp
+*.cache
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+release/
+
+# Confirmed non-distributable / rights-unverified materials kept only on the
+# local development machine. These paths are intentionally not build inputs.
+/RIMG1089.JPG
+/RIMG1159.JPG
+/データ利用規約.jpg
+/アプリ画像.png

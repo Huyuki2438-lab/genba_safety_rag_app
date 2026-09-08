@@ -10,8 +10,8 @@ const readError = async (response: Response): Promise<string> => {
   return "共有データへ接続できません。ネットワーク接続を確認してください。";
 };
 
-export const fetchAnalysisHistory = async (filters: HistoryFilters = {}): Promise<AnalysisHistoryEntry[]> => {
-  const params = new URLSearchParams();
+export const fetchAnalysisHistory = async (filters: HistoryFilters = {}, offset = 0): Promise<AnalysisHistoryEntry[]> => {
+  const params = new URLSearchParams({ offset: String(offset), limit: "50" });
   [["date_from", filters.dateFrom], ["date_to", filters.dateTo], ["site_name", filters.siteName], ["work_content", filters.workContent], ["created_by", filters.createdBy], ["keyword", filters.keyword]].forEach(([key, value]) => { const normalized = value?.trim(); if (normalized) params.set(String(key), normalized); });
   const response = await fetch(`${HISTORY_ENDPOINT}${params.size ? `?${params}` : ""}`);
   if (!response.ok) throw new Error(await readError(response));

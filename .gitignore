@@ -32,3 +32,10 @@ release/
 /RIMG1159.JPG
 /データ利用規約.jpg
 /アプリ画像.png
+
+# Company-only credentials and deployment artifacts
+secrets.env
+**/secrets.env
+/frontend_build/
+/tmp/
+/config.json

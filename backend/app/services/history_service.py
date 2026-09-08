@@ -11,6 +11,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from backend.app.core.config import settings
+from backend.app.core.shared_storage import publish, require_root
 from backend.app.repositories.history_repository import AnalysisHistoryRecord, HistoryRepository, HistoryStorageUnavailable, history_repository
 from backend.app.schemas.history import AnalysisHistoryEntry, CreateAnalysisHistoryRequest
 
@@ -47,14 +48,14 @@ class HistoryService:
         self._repo = repository or history_repository
 
     def list(self, *, date_from: date | None = None, date_to: date | None = None, site_name: str | None = None,
-             work_content: str | None = None, created_by: str | None = None, keyword: str | None = None) -> list[AnalysisHistoryEntry]:
+             work_content: str | None = None, created_by: str | None = None, keyword: str | None = None, offset: int = 0, limit: int = 50) -> list[AnalysisHistoryEntry]:
         self._assert_photo_storage()
         created_from = datetime.combine(date_from, time.min, tzinfo=JST) if date_from else None
         created_to = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=JST) if date_to else None
         return [_entry_from_record(record) for record in self._repo.list(
             created_from=created_from, created_to=created_to, site_name=site_name,
             work_content=work_content, created_by=created_by, keyword=keyword,
-        )]
+        )[offset:offset + limit]]
 
     def get(self, entry_id: str) -> AnalysisHistoryEntry | None:
         self._assert_photo_storage()
@@ -68,15 +69,15 @@ class HistoryService:
             raise ValueError("写真データを読み込めませんでした。") from exc
         if not image_bytes:
             raise ValueError("写真データが空です。")
+        require_root(settings.DATA_DIR / "records")
+        require_root(settings.PHOTO_STORAGE_DIR)
         now = datetime.now(JST)
         entry_id = str(uuid.uuid4())
         relative_path = Path(f"{now:%Y}") / f"{now:%m}" / f"{entry_id}{_extension(request.imageName, request.imageMimeType)}"
         destination = settings.PHOTO_STORAGE_DIR / relative_path
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
-            temporary = destination.with_suffix(destination.suffix + ".uploading")
-            temporary.write_bytes(image_bytes)
-            os.replace(temporary, destination)
+            publish(destination, image_bytes)
         except OSError as exc:
             raise OSError("共有写真ストレージへ保存できませんでした。") from exc
         try:
@@ -90,10 +91,8 @@ class HistoryService:
             )
             return _entry_from_record(self._repo.add(record))
         except Exception:
-            try:
-                destination.unlink(missing_ok=True)
-            except OSError:
-                pass
+            # A lost SMB acknowledgement may mean the record was committed.
+            # Retain its photo; removing it here could corrupt committed data.
             raise
 
     def soft_delete(self, entry_id: str) -> bool:
@@ -107,13 +106,8 @@ class HistoryService:
         source directory and old entry id, so an already imported entry is
         skipped on subsequent runs.
         """
-        # The shared root may not exist until the first import. Verify that
-        # the configured NAS location can be created/written instead of
-        # treating a new empty directory as an outage.
-        try:
-            settings.PHOTO_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            raise HistoryStorageUnavailable("Shared photo storage is unavailable") from exc
+        require_root(settings.DATA_DIR / "records")
+        require_root(settings.PHOTO_STORAGE_DIR)
         index_file = source_dir / "analysis_history.json"
         try:
             raw_entries = json.loads(index_file.read_text(encoding="utf-8"))
@@ -138,7 +132,7 @@ class HistoryService:
             folder_name = str(raw.get("historyFolder") or "")
             image_file_name = str(raw.get("imageFileName") or "")
             source_image = source_dir / folder_name / image_file_name
-            if not folder_name or not image_file_name or not source_image.is_file():
+            if not source_image.resolve().is_relative_to(source_dir.resolve()) or not folder_name or not image_file_name or not source_image.is_file():
                 skipped += 1
                 continue
             try:
@@ -147,9 +141,7 @@ class HistoryService:
                 relative_path = Path(f"{created_at:%Y}") / f"{created_at:%m}" / f"{uuid.uuid4()}{extension}"
                 destination = settings.PHOTO_STORAGE_DIR / relative_path
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                temporary = destination.with_suffix(destination.suffix + ".uploading")
-                temporary.write_bytes(source_image.read_bytes())
-                os.replace(temporary, destination)
+                publish(destination, source_image.read_bytes())
                 mode = raw.get("mode") if raw.get("mode") in {"gemini_a", "gemini_b", "vertex"} else "gemini_a"
                 record = AnalysisHistoryRecord(
                     id=entry_id, created_at=created_at, updated_at=created_at, deleted_at=None,
@@ -163,24 +155,14 @@ class HistoryService:
                 self._repo.add(record)
                 imported += 1
             except (OSError, ValueError, HistoryStorageUnavailable):
-                try:
-                    destination.unlink(missing_ok=True)  # type: ignore[has-type]
-                except (OSError, UnboundLocalError):
-                    pass
+                # Retain photos if a commit acknowledgement was lost.
                 skipped += 1
         return imported, skipped
 
     @staticmethod
     def _assert_photo_storage() -> None:
-        try:
-            # A new deployment deliberately has no history directory yet.
-            # Create it on first use; this never removes or overwrites
-            # existing user photos.
-            settings.PHOTO_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-            if not settings.PHOTO_STORAGE_DIR.is_dir():
-                raise OSError("photo storage path is not a directory")
-        except OSError as exc:
-            raise HistoryStorageUnavailable("Shared photo storage is unavailable") from exc
+        require_root(settings.PHOTO_STORAGE_DIR)
+
 
 
 def _legacy_datetime(value: str) -> datetime:

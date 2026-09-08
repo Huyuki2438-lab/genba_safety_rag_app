@@ -838,3 +838,15 @@ body {
   white-space: nowrap;
   word-break: keep-all;
 }
+
+/* Keep shared history rows visible when the detail grows inside a flex page. */
+.history-page > * { flex-shrink: 0; }
+.history-page .detail-actions { flex-wrap: wrap; }
+.history-page .detail-actions h2 { margin: 0; flex: 1 0 140px; font-weight: 800; }
+.history-page .detail-actions button { width: auto; flex-shrink: 0; white-space: nowrap; }
+.history-page .page-actions button, .history-page .detail-actions button, .app-header button {
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; cursor: pointer; background: white;
+}
+.history-page button:disabled { opacity: .45; cursor: default; }
+.app-header button { margin-top: 8px; }
+.history-filters h2 { font-size: 1.2rem; font-weight: 800; }

@@ -73,9 +73,11 @@ function App() {
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [page, setPage] = useState<"create" | "history">("create");
   const [siteName, setSiteName] = useState("");
+  useEffect(() => { void fetch("/api/v1/project").then(r => r.json()).then(p => setSiteName(p.project_name)).catch(() => {}); }, []);
   const [workContent, setWorkContent] = useState("");
   const [mainRisk, setMainRisk] = useState("");
   const {
+    pendingSave, retrySave,
     isAnalyzing,
     analysisMarkdown,
     analysisHistory,
@@ -142,6 +144,7 @@ function App() {
           template_name: "report.html",
           output_filename: fileName,
           engine: "playwright",
+          record_id: activeHistoryId,
           context: {
             title: PDF_REPORT_TITLE,
             body_html: printableBodyHtml
@@ -150,14 +153,14 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error(`PDF生成に失敗しました (${response.status})`);
+        throw new Error((await response.json()).detail || "PDFを保存できませんでした。");
       }
 
       const pdfBlob = await response.blob();
       downloadPdfBlob(pdfBlob, fileName);
     } catch (error) {
       console.error("PDF保存に失敗しました:", error);
-      window.alert("PDFの保存に失敗しました。もう一度お試しください。");
+      window.alert(error instanceof Error ? error.message : "PDFの保存に失敗しました。");
     } finally {
       setIsSavingPdf(false);
     }
@@ -191,6 +194,7 @@ function App() {
           runtimeConfig={runtimeConfig}
         />
 
+        {pendingSave && !isAnalyzing && <div role="alert"><p>分析結果はまだ保存されていません。NAS復旧後、先に履歴で保存済みか確認してください。</p><button onClick={() => void retrySave()}>分析結果の保存を再試行</button></div>}
         <div className="main-grid">
           <section className="operation-column">
             <ImageUploadPanel

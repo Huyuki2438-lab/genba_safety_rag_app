@@ -177,12 +177,13 @@ export function ResultTabs({
       </div>
 
       <div className="report-panel">
+        {errorMessage && hasResult && <p className="history-message" role="alert">{errorMessage}</p>}
         {isAnalyzing ? (
           <div className="report-status report-status--loading">
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             <p>危険分析を実行中です。しばらくお待ちください。</p>
           </div>
-        ) : errorMessage ? (
+        ) : errorMessage && !hasResult ? (
           <div className="report-status report-status--error" role="alert">
             <AlertCircle className="size-4" aria-hidden="true" />
             <p>{errorMessage}</p>

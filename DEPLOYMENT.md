@@ -1,13 +1,14 @@
+> この文書の旧配布方式は廃止しました。現行版は `dist/03_管理者向け資料` と `NAS_DISTRIBUTION_REPORT.md` を参照してください。NAS上のSQLiteの共通更新は使用しません。
+
 # 社内配布・共有履歴の設定
 
-このアプリは、各PCでローカルのWebViewとFastAPIだけを起動します。履歴を共有するのはPostgreSQLであり、SQLiteファイルをNASに置く方式は使用しません。
+このアプリは、各PCでローカルのWebViewとFastAPIだけを起動します。履歴の索引はNAS上の共通SQLiteファイル、写真は同じNAS上の共通フォルダで管理します。
 
 ## 1. 共有基盤（管理者が一度だけ実施）
 
-1. 社内サーバーにPostgreSQLを用意し、アプリ専用のDBと最小権限のユーザーを作成します。
-2. NASに `\\nas-server\\KY写真解析\\data\\photos` を作成します。利用者には作成・読取・変更権限を付与します（削除権限は不要です）。
-3. 配布フォルダの `.env` を `.env.shared.example` を元に作成し、`DATABASE_URL` と `PHOTO_STORAGE_DIR` を設定します。秘密情報を含む `.env` はソース管理へ登録しません。
-4. 管理者PCで `.venv\\Scripts\\python.exe scripts\\initialize_postgres.py` を一度実行します。正常終了後、`ky_analysis_history` が作成されます。
+1. NASに `\\landisk-87a5d6\\disk1\\KY検出システムデータ\\photos` を作成します。利用者には作成・読取・変更権限を付与します（削除権限は不要です）。
+2. 開発版と配布フォルダの `.env` に、`.env.shared.example` と同じ `DATABASE_URL` と `PHOTO_STORAGE_DIR` を設定します。両者が同じSQLiteファイルと写真フォルダを参照することが統一の条件です。
+3. 管理者PCで `.venv\\Scripts\\python.exe scripts\\initialize_postgres.py` を一度実行します。正常終了後、NAS上に `ky_analysis_history.sqlite3` と `ky_analysis_history` テーブルが作成されます。
 
 ### 既存のネットワーク／ローカル履歴を引き継ぐ場合
 
@@ -21,7 +22,7 @@
 
 同じフォルダを再指定しても重複登録しない、再実行可能な取込です。取込元の履歴は削除しません。
 
-PostgreSQL側にはネットワークから到達できるよう、DBサーバーのTCP 5432（または組織指定ポート）とpg_hba.confを、利用PC／アプリ用ユーザーに限定して設定してください。
+SQLiteは同時に1件だけ書き込めるため、解析の保存・削除が同時に発生した場合はアプリが最大30秒待機します。NAS側でこのフォルダの作成・変更権限を利用者へ付与してください。
 
 ## 2. 配布
 

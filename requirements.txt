@@ -1,5 +1,5 @@
 fastapi
-uvicorn[standard]
+uvicorn
 jinja2
 pydantic
 pydantic-settings
@@ -7,10 +7,6 @@ python-dotenv
 playwright
 requests
 tzdata
-SQLAlchemy>=2.0,<3.0
-psycopg[binary]>=3.2,<4.0
 
 # Desktop application dependencies
-pywebview
-pythonnet
 pyinstaller

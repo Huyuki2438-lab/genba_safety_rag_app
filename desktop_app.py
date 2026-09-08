@@ -1,19 +1,10 @@
-"""デスクトップアプリ版の起動エントリポイント。
-
-`GenbaSafetyRAGApp.exe` (PyInstaller onedir) から実行される想定。
-- 内部でFastAPIサーバーをバックグラウンドスレッドで起動
-- pywebview (Edge WebView2) の専用ウィンドウでUIを表示
-- ウィンドウを閉じるとサーバー・全スレッドを終了してプロセスを終了する
-- コマンドプロンプト画面は表示しない (PyInstaller --windowed でビルドする前提)
-- 同一PCでの二重起動を防止し、既存ウィンドウを前面に出す
-- ネットワーク共有(UNC)上からの実行を考慮し、書き込み先はローカルPCの
-  AppData配下に固定する (共有フォルダ上のJSON履歴への複数PC同時書き込みは
-  破損リスクがあるため)
-"""
+"""Local browser launcher; NAS contains data only, never executable files."""
 
 from __future__ import annotations
 
 import ctypes
+import json
+import webbrowser
 import logging
 import os
 import socket
@@ -24,8 +15,8 @@ from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-APP_NAME = "KY写真解析"
-CONTROL_PORT = 51837  # 同一PC二重起動検知専用のローカルポート (mutex代わり)
+APP_NAME = "KY安全管理"
+CONTROL_PORT = int(os.environ.get("KY_CONTROL_PORT", "51837"))  # 同一PC二重起動検知専用のローカルポート (mutex代わり)
 STARTUP_TIMEOUT_SEC = 20
 
 
@@ -140,6 +131,7 @@ class SingleInstanceGuard:
             except OSError:
                 return
             try:
+                conn.settimeout(2)
                 conn.recv(64)
             except OSError:
                 pass
@@ -149,7 +141,7 @@ class SingleInstanceGuard:
                 try:
                     cb()
                 except Exception:
-                    self._logger.exception("failed to bring window to front")
+                    self._logger.error("failed to open browser")
 
     def close(self) -> None:
         if self._sock is not None:
@@ -161,115 +153,59 @@ class SingleInstanceGuard:
 
 def main() -> int:
     app_dir = _app_dir()
-    local_root = _local_data_root()
-
-    logger = _setup_logging(local_root / "logs")
-    logger.info("=== %s starting (pid=%s) ===", APP_NAME, os.getpid())
-    logger.info("app_dir=%s", app_dir)
-    logger.info("local_root=%s", local_root)
-
-    # 二重起動チェック (同一PC内)
+    # Reject UNC and mapped network drives: secrets and runtime stay on PC.
+    if str(app_dir).startswith("\\\\") or ctypes.windll.kernel32.GetDriveTypeW(str(app_dir.anchor)) == 4:
+        _fatal_message_box(APP_NAME, "フォルダを各PCのローカルディスクへコピーしてから起動してください。")
+        return 1
+    logger = _setup_logging(_local_data_root() / "logs")
     guard = SingleInstanceGuard(CONTROL_PORT, logger)
     if not guard.try_become_primary():
-        logger.info("another instance is already running; notifying and exiting")
         guard.notify_existing_instance()
         return 0
-
-    # 書き込み先をローカルPC固定にする (共有フォルダ上でのJSON同時書き込み破損を回避)
-    os.environ.setdefault("DATA_DIR", str(local_root / "data"))
-
-    # playwright(PDF生成用Chromium) はアプリ配布物に同梱したものを使う
-    bundled_browsers = app_dir / "pw-browsers"
-    if bundled_browsers.exists():
-        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(bundled_browsers))
-
+    server = None
+    server_thread = None
     try:
-        sys.path.insert(0, str(app_dir))
-        from main import app as fastapi_app  # noqa: PLC0415  (env設定後にimportする必要がある)
-        import uvicorn  # noqa: PLC0415
-    except Exception:
-        logger.exception("failed to import backend application")
-        _fatal_message_box(APP_NAME, "アプリの初期化に失敗しました。logsフォルダを確認してください。")
-        guard.close()
+        from main import app
+        import uvicorn
+        @app.post("/api/v1/shutdown")
+        def shutdown():
+            threading.Timer(0.3, lambda: setattr(server, "should_exit", True)).start()
+            return {"stopping": True}
+        port = _find_free_port()
+        config = uvicorn.Config(app, host="127.0.0.1", port=port,
+                                log_config=None, access_log=False, log_level="critical",
+                                loop="asyncio", http="h11", ws="none")
+        server = uvicorn.Server(config)
+        server_thread = threading.Thread(target=server.run, daemon=True)
+        server_thread.start()
+        deadline = time.monotonic() + 30
+        while not server.started and server_thread.is_alive() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if not server.started:
+            raise RuntimeError()
+        url = f"http://127.0.0.1:{port}/"
+        def show():
+            if os.environ.get("KY_NO_BROWSER") != "1":
+                webbrowser.open(url)
+        guard.set_show_callback(show)
+        logger.info("Application started on local port %s", port)
+        show()
+        # Wait for the user's explicit in-app exit. Closing an ordinary browser
+        # tab is not a reliable application-lifecycle signal.
+        while server_thread.is_alive():
+            server_thread.join(timeout=0.5)
+        return 0
+    except Exception as exc:
+        logger.error("Startup or runtime failed (%s)", type(exc).__name__)
+        _fatal_message_box(APP_NAME, "起動できませんでした。config.json、secrets.envがEXEと同じフォルダにあることと、設定内容を確認してください。")
         return 1
-
-    port = _find_free_port()
-    logger.info("selected local port: %s", port)
-
-    config = uvicorn.Config(
-        fastapi_app,
-        host="127.0.0.1",
-        port=port,
-        log_level="warning",
-        access_log=False,
-    )
-    server = uvicorn.Server(config)
-
-    server_thread = threading.Thread(target=server.run, daemon=True)
-    server_thread.start()
-
-    waited = 0.0
-    while not server.started and waited < STARTUP_TIMEOUT_SEC:
-        time.sleep(0.1)
-        waited += 0.1
-
-    if not server.started:
-        logger.error("web server failed to start within %ss", STARTUP_TIMEOUT_SEC)
-        _fatal_message_box(APP_NAME, "内部サーバーの起動に失敗しました。logsフォルダを確認してください。")
-        server.should_exit = True
-        guard.close()
-        return 1
-
-    logger.info("web server started at http://127.0.0.1:%s", port)
-
-    try:
-        import webview  # noqa: PLC0415
-    except Exception:
-        logger.exception("failed to import webview")
-        _fatal_message_box(APP_NAME, "画面表示の初期化に失敗しました。logsフォルダを確認してください。")
-        server.should_exit = True
-        guard.close()
-        return 1
-
-    window = webview.create_window(
-        "KY写真解析",
-        url=f"http://127.0.0.1:{port}/",
-        width=1400,
-        height=900,
-        min_size=(1000, 700),
-    )
-
-    icon_path = app_dir / "static" / "icons" / "app_icon.ico"
-
-    def _bring_to_front() -> None:
-        try:
-            window.restore()
-        except Exception:
-            pass
-        try:
-            window.on_top = True
-            window.on_top = False
-        except Exception:
-            pass
-
-    guard.set_show_callback(_bring_to_front)
-
-    try:
-        webview.start(
-            gui="edgechromium",
-            private_mode=False,
-            icon=str(icon_path) if icon_path.is_file() else None,
-        )
-    except Exception:
-        logger.exception("webview terminated with an error")
     finally:
-        logger.info("window closed; shutting down web server")
-        server.should_exit = True
-        server_thread.join(timeout=10)
+        if server:
+            server.should_exit = True
+        if server_thread:
+            server_thread.join(timeout=100)
         guard.close()
-        logger.info("=== %s stopped ===", APP_NAME)
-
-    return 0
+        logger.info("Application stopped")
 
 
 if __name__ == "__main__":

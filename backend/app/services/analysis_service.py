@@ -11,6 +11,7 @@ from backend.app.schemas.analysis import (
     SafetyAnalysisResult,
 )
 from backend.app.core.config import settings
+from backend.app.core.secrets import redact
 
 
 class AnalysisService:
@@ -38,6 +39,8 @@ class AnalysisService:
             system_instruction=system_instruction,
             prompt=user_prompt,
         )
+
+        markdown = redact(markdown)
 
         # 4. Parse response (extract structured data)
         factors = self.parser.parse_markdown_table(markdown)

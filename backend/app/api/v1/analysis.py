@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from backend.app.schemas.analysis import AnalyzeSafetyRequest, AnalyzeSafetyResponse, AnalyzeSafetyErrorResponse
 from backend.app.services.analysis_service import analysis_service
+from backend.app.core.secrets import redact
 
 logger = logging.getLogger("genba_safety_rag_app.api")
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
@@ -30,7 +31,7 @@ def _build_error_detail(
     used_kind=safe_metadata.get("used_kind"),  # type: ignore[arg-type]
     used_model=safe_metadata.get("used_model"),
   )
-  return payload.model_dump()
+  return redact(payload.model_dump())
 
 @router.post("/analyze", response_model=AnalyzeSafetyResponse)
 def analyze_safety(req: AnalyzeSafetyRequest) -> AnalyzeSafetyResponse:
@@ -42,18 +43,18 @@ def analyze_safety(req: AnalyzeSafetyRequest) -> AnalyzeSafetyResponse:
             detail=_build_error_detail(
                 error_type="invalid_target",
                 error_category="target不正",
-                error_message=str(exc),
+                error_message="分析設定を確認してください。",
                 metadata={"used_target": req.target},
             ),
         ) from exc
     except Exception as exc:
-        logger.exception("Analysis failed")
+        logger.error("Analysis failed (%s)", type(exc).__name__)
         raise HTTPException(
             status_code=500,
             detail=_build_error_detail(
                 error_type="internal_error",
                 error_category="内部エラー",
-                error_message=f"分析実行に失敗しました: {exc}",
+                error_message="AI分析に失敗しました。インターネット接続とAPI設定を確認して再試行してください。",
                 metadata={"used_target": req.target},
             ),
         ) from exc

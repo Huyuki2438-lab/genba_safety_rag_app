@@ -23,13 +23,13 @@ class AIBase(ABC):
     # Shared utilities used by subclasses
     # ------------------------------------------------------------------
 
-    def _post_json(self, url: str, payload: dict) -> dict:
+    def _post_json(self, url: str, payload: dict, headers: dict | None = None) -> dict:
         """POST a JSON payload and return the response as a dict."""
         body = json.dumps(payload).encode("utf-8")
         req = request.Request(
             url=url,
             data=body,
-            headers={"Content-Type": "application/json; charset=utf-8"},
+            headers={"Content-Type": "application/json; charset=utf-8", **(headers or {})},
             method="POST",
         )
         try:
@@ -37,12 +37,9 @@ class AIBase(ABC):
                 raw = resp.read().decode("utf-8", errors="ignore")
                 return json.loads(raw) if raw else {}
         except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="ignore")
-            raise UpstreamExecutionError(
-                f"API error (HTTP {exc.code}): {detail or exc.reason}"
-            ) from exc
-        except Exception as exc:
-            raise UpstreamExecutionError(f"API connection error: {str(exc)}") from exc
+            raise UpstreamExecutionError(f"AIサービスへの接続に失敗しました（HTTP {exc.code}）。管理者へ連絡してください。") from None
+        except Exception:
+            raise UpstreamExecutionError("AIサービスに接続できません。インターネット接続を確認して再試行してください。") from None
 
     def _extract_text(self, response_json: dict) -> str:
         """Extract text from the common Gemini / Vertex response format."""

@@ -16,12 +16,11 @@ class VertexProvider(AIBase):
         encoded_model = parse.quote(self.model, safe="")
         encoded_project = parse.quote(self.project_id, safe="")
         encoded_location = parse.quote(self.location, safe="")
-        encoded_key = parse.quote(self.api_key, safe="")
 
         url = (
             f"https://{encoded_location}-aiplatform.googleapis.com/v1/projects/"
             f"{encoded_project}/locations/{encoded_location}/publishers/google/models/"
-            f"{encoded_model}:generateContent?key={encoded_key}"
+            f"{encoded_model}:generateContent"
         )
 
         payload = {
@@ -44,5 +43,5 @@ class VertexProvider(AIBase):
             ],
         }
 
-        response_json = self._post_json(url, payload)
+        response_json = self._post_json(url, payload, {"x-goog-api-key": self.api_key})
         return self._extract_text(response_json)

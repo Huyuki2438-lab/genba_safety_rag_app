@@ -1,4 +1,4 @@
-r"""Import old local/NAS `history` folders into shared PostgreSQL and NAS photos.
+r"""Import old local/NAS `history` folders into shared per-record JSON and NAS photos.
 
 Example:
   python scripts/import_legacy_history.py C:\Users\user\AppData\Local\GenbaSafetyRAGApp\history \\\\server\share\KY写真解析\history
@@ -6,7 +6,10 @@ Example:
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app.services.history_service import history_service
 

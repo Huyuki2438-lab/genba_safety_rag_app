@@ -12,10 +12,9 @@ class GeminiProvider(AIBase):
 
     def predict(self, image_base64: str, image_mime_type: str, system_instruction: str, prompt: str) -> str:
         encoded_model = parse.quote(self.model, safe="")
-        encoded_key = parse.quote(self.api_key, safe="")
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{encoded_model}:generateContent?key={encoded_key}"
+            f"{encoded_model}:generateContent"
         )
 
         payload = {
@@ -38,5 +37,5 @@ class GeminiProvider(AIBase):
             ],
         }
 
-        response_json = self._post_json(url, payload)
+        response_json = self._post_json(url, payload, {"x-goog-api-key": self.api_key})
         return self._extract_text(response_json)

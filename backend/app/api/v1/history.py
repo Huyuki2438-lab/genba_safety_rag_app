@@ -15,17 +15,18 @@ NETWORK_MESSAGE = "共有データへ接続できません。ネットワーク�
 
 
 def _unavailable(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=503, detail=NETWORK_MESSAGE)
+    return HTTPException(status_code=503, detail=str(exc))
 
 
 @router.get("/history", response_model=AnalysisHistoryResponse)
 def get_history(date_from: date | None = Query(default=None), date_to: date | None = Query(default=None),
                 site_name: str | None = Query(default=None), work_content: str | None = Query(default=None),
-                created_by: str | None = Query(default=None), keyword: str | None = Query(default=None)) -> AnalysisHistoryResponse:
+                created_by: str | None = Query(default=None), keyword: str | None = Query(default=None),
+                offset: int = Query(default=0, ge=0), limit: int = Query(default=50, ge=1, le=200)) -> AnalysisHistoryResponse:
     try:
         return AnalysisHistoryResponse(history=history_service.list(
             date_from=date_from, date_to=date_to, site_name=site_name, work_content=work_content,
-            created_by=created_by, keyword=keyword,
+            created_by=created_by, keyword=keyword, offset=offset, limit=limit,
         ))
     except HistoryStorageUnavailable as exc:
         raise _unavailable(exc)
@@ -60,3 +61,48 @@ def delete_history(entry_id: str) -> Response:
     except HistoryStorageUnavailable as exc:
         raise _unavailable(exc)
     return Response(status_code=204)
+
+
+@router.get("/history/{entry_id}/reports")
+def list_reports(entry_id: str):
+    from uuid import UUID
+    from backend.app.core.shared_storage import require_root
+    try:
+        require_root(settings.DATA_DIR / "reports")
+        folder = settings.DATA_DIR / "reports" / str(UUID(entry_id))
+        return {"reports": [{"name": p.name, "url": f"/reports/{entry_id}/{p.name}"}
+                            for p in sorted(folder.glob("*.pdf"))]}
+    except (OSError, HistoryStorageUnavailable):
+        raise HTTPException(status_code=503, detail=NETWORK_MESSAGE) from None
+    except ValueError:
+        raise HTTPException(status_code=404, detail="履歴が見つかりません。") from None
+
+
+@router.post("/history/{entry_id}/export")
+def export_history(entry_id: str):
+    import io
+    import json
+    import zipfile
+    from uuid import uuid4
+    from fastapi.responses import Response
+    from backend.app.repositories.history_repository import history_repository
+    from backend.app.core.shared_storage import require_root, publish
+    try:
+        record = history_repository.get(entry_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="履歴が見つかりません。")
+        require_root(settings.DATA_DIR / "export")
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("record.json", json.dumps({"schema_version": 1, "project_id": settings.PROJECT_ID,
+                "record_id": record.id, "analysis": record.model_dump(mode="json")}, ensure_ascii=False))
+            photo = settings.PHOTO_STORAGE_DIR / record.photo_relative_path
+            z.write(photo, "images/" + photo.name)
+            for pdf in (settings.DATA_DIR / "reports" / record.id).glob("*.pdf"):
+                z.write(pdf, "reports/" + pdf.name)
+        content = archive.getvalue()
+        name = f"{uuid4()}.zip"
+        publish(settings.DATA_DIR / "export" / name, content)
+        return Response(content, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+    except (HistoryStorageUnavailable, OSError):
+        raise HTTPException(status_code=503, detail="書き出しできませんでした。写真・PDFの有無、NASの接続・権限・空き容量を確認してください。") from None

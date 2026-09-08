@@ -11,3 +11,5 @@ class PdfGenerateRequest(BaseModel):
   engine: Literal["playwright", "wkhtmltopdf"] = "playwright"
   output_filename: str = "report.pdf"
   history_folder: str | None = None
+
+  record_id: str | None = None

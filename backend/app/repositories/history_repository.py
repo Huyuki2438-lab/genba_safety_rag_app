@@ -1,141 +1,143 @@
 from __future__ import annotations
-
-from contextlib import contextmanager
+import json
+import os
+import threading
 from datetime import datetime
-
-from sqlalchemy import DateTime, String, Text, create_engine, select
-from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
-
+from pathlib import Path
+from uuid import UUID
+from pydantic import BaseModel, ValidationError
 from backend.app.core.config import settings
+from backend.app.core.secrets import redact
+from backend.app.core.shared_storage import HistoryStorageUnavailable, publish, require_root
 
-
-class HistoryStorageUnavailable(RuntimeError):
-    """The common PostgreSQL server cannot be used right now."""
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-class AnalysisHistoryRecord(Base):
-    __tablename__ = "ky_analysis_history"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
-    created_by: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    site_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    work_content: Mapped[str] = mapped_column(String(500), nullable=False, default="")
-    main_risk: Mapped[str] = mapped_column(String(500), nullable=False, default="")
-    image_name: Mapped[str] = mapped_column(String(500), nullable=False)
-    image_mime_type: Mapped[str] = mapped_column(String(100), nullable=False, default="image/jpeg")
-    photo_relative_path: Mapped[str] = mapped_column(String(700), nullable=False)
-    mode: Mapped[str] = mapped_column(String(50), nullable=False)
-    provider_display_label: Mapped[str] = mapped_column(String(255), nullable=False)
-    model: Mapped[str] = mapped_column(String(255), nullable=False)
-    markdown: Mapped[str] = mapped_column(Text, nullable=False)
-
+class AnalysisHistoryRecord(BaseModel):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None = None
+    created_by: str = ""
+    site_name: str = ""
+    work_content: str = ""
+    main_risk: str = ""
+    image_name: str
+    image_mime_type: str = "image/jpeg"
+    photo_relative_path: str
+    mode: str
+    provider_display_label: str
+    model: str
+    markdown: str
 
 class HistoryRepository:
-    def __init__(self) -> None:
-        self._engine = None
-        self._session_factory = None
+    def __init__(self, root: Path | None = None, project_id: str | None = None):
+        self.root = root or settings.DATA_DIR
+        self.project_id = project_id or settings.PROJECT_ID
+        self._cache = {}
+        self._lock = threading.RLock()
 
-    def _ensure_database(self) -> None:
-        if self._session_factory is not None:
-            return
-        if not settings.DATABASE_URL.strip():
-            raise HistoryStorageUnavailable("DATABASE_URL is not configured")
+    def initialize_schema(self):
+        require_root(self.root)
+        for folder in ("records", "images", "reports", "export"):
+            (self.root / folder).mkdir(exist_ok=True)
+
+    def _files(self):
+        require_root(self.root / "records")
+        def failed(error):
+            raise error
         try:
-            engine_options = {"pool_pre_ping": True}
-            if settings.DATABASE_URL.startswith("postgresql"):
-                engine_options.update({"pool_size": 5, "max_overflow": 5, "connect_args": {"connect_timeout": 5}})
-            self._engine = create_engine(settings.DATABASE_URL, **engine_options)
-            self._session_factory = sessionmaker(self._engine, expire_on_commit=False)
-        except SQLAlchemyError as exc:
-            raise HistoryStorageUnavailable("Cannot configure PostgreSQL") from exc
+            return [Path(base) / name for base, _, names in os.walk(self.root / "records", onerror=failed)
+                    for name in names if name.endswith(".json")]
+        except OSError:
+            raise HistoryStorageUnavailable("共有履歴を読み込めません。NASの接続と読み取り権限を確認してください。") from None
 
-    def initialize_schema(self) -> None:
-        self._ensure_database()
+    def _read(self, path):
         try:
-            assert self._engine is not None
-            Base.metadata.create_all(self._engine)
-        except SQLAlchemyError as exc:
-            raise HistoryStorageUnavailable("Cannot initialize PostgreSQL schema") from exc
-
-    @contextmanager
-    def session(self):
-        self._ensure_database()
-        assert self._session_factory is not None
-        db = self._session_factory()
-        try:
-            yield db
-            db.commit()
-        except (OperationalError, SQLAlchemyError) as exc:
-            db.rollback()
-            raise HistoryStorageUnavailable("PostgreSQL connection failed") from exc
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
-
-    def list(self, *, created_from: datetime | None = None, created_to: datetime | None = None,
-             site_name: str | None = None, work_content: str | None = None,
-             created_by: str | None = None, keyword: str | None = None) -> list[AnalysisHistoryRecord]:
-        with self.session() as db:
-            stmt = select(AnalysisHistoryRecord).where(AnalysisHistoryRecord.deleted_at.is_(None))
-            if created_from:
-                stmt = stmt.where(AnalysisHistoryRecord.created_at >= created_from)
-            if created_to:
-                stmt = stmt.where(AnalysisHistoryRecord.created_at < created_to)
-            if site_name:
-                stmt = stmt.where(AnalysisHistoryRecord.site_name.ilike(f"%{site_name}%"))
-            if work_content:
-                stmt = stmt.where(AnalysisHistoryRecord.work_content.ilike(f"%{work_content}%"))
-            if created_by:
-                stmt = stmt.where(AnalysisHistoryRecord.created_by.ilike(f"%{created_by}%"))
-            if keyword:
-                term = f"%{keyword}%"
-                stmt = stmt.where(
-                    AnalysisHistoryRecord.site_name.ilike(term)
-                    | AnalysisHistoryRecord.work_content.ilike(term)
-                    | AnalysisHistoryRecord.main_risk.ilike(term)
-                    | AnalysisHistoryRecord.markdown.ilike(term)
-                    | AnalysisHistoryRecord.image_name.ilike(term)
-                )
-            return list(db.scalars(stmt.order_by(AnalysisHistoryRecord.created_at.desc())).all())
-
-    def get(self, entry_id: str) -> AnalysisHistoryRecord | None:
-        with self.session() as db:
-            return db.scalar(select(AnalysisHistoryRecord).where(
-                AnalysisHistoryRecord.id == entry_id,
-                AnalysisHistoryRecord.deleted_at.is_(None),
-            ))
-
-    def get_any(self, entry_id: str) -> AnalysisHistoryRecord | None:
-        """Find a record even if it has already been logically deleted."""
-        with self.session() as db:
-            return db.scalar(select(AnalysisHistoryRecord).where(AnalysisHistoryRecord.id == entry_id))
-
-    def add(self, record: AnalysisHistoryRecord) -> AnalysisHistoryRecord:
-        with self.session() as db:
-            db.add(record)
+            stat = path.stat()
+            stamp = (stat.st_mtime_ns, stat.st_size)
+            with self._lock:
+                cached = self._cache.get(path)
+            if cached and cached[0] == stamp:
+                return cached[1]
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if raw.get("schema_version") != 1 or raw.get("project_id") != self.project_id:
+                return None
+            record = AnalysisHistoryRecord.model_validate(redact(raw["analysis"]))
+            if str(UUID(record.id)) != raw.get("record_id") or path.stem != record.id:
+                raise ValueError()
+            if not record.created_at.tzinfo or not record.updated_at.tzinfo:
+                raise ValueError()
+            relative = Path(record.photo_relative_path)
+            if relative.is_absolute() or ".." in relative.parts or ":" in str(relative) or record.mode not in settings.TARGETS:
+                raise ValueError()
+        except (ValueError, KeyError, TypeError, AttributeError, ValidationError):
+            record = None
+        except OSError:
+            raise HistoryStorageUnavailable("共有履歴を読み込めません。NASの接続と読み取り権限を確認してください。") from None
+        with self._lock:
+            self._cache[path] = (stamp, record)
         return record
 
-    def soft_delete(self, entry_id: str, deleted_at: datetime) -> bool:
-        with self.session() as db:
-            record = db.scalar(select(AnalysisHistoryRecord).where(
-                AnalysisHistoryRecord.id == entry_id,
-                AnalysisHistoryRecord.deleted_at.is_(None),
-            ))
-            if record is None:
-                return False
-            record.deleted_at = deleted_at
-            record.updated_at = deleted_at
-            return True
+    def list(self, *, created_from=None, created_to=None, site_name=None, work_content=None, created_by=None, keyword=None):
+        result = []
+        files = self._files()
+        for path in files:
+            record = self._read(path)
+            if record is None or record.deleted_at or path.with_suffix(".deleted").exists():
+                continue
+            if created_from and record.created_at < created_from:
+                continue
+            if created_to and record.created_at >= created_to:
+                continue
+            if any(value and value.casefold() not in getattr(record, field).casefold()
+                   for field, value in (("site_name", site_name), ("work_content", work_content), ("created_by", created_by))):
+                continue
+            if keyword and keyword.casefold() not in " ".join((record.site_name, record.work_content, record.main_risk, record.markdown, record.image_name)).casefold():
+                continue
+            result.append(record)
+        with self._lock:
+            live = set(files)
+            self._cache = {p: v for p, v in self._cache.items() if p in live}
+        return sorted(result, key=lambda r: (r.created_at, r.id), reverse=True)
 
+    def _path(self, entry_id):
+        try:
+            entry_id = str(UUID(entry_id))
+        except ValueError:
+            return None
+        return next((p for p in self._files() if p.stem == entry_id), None)
+
+    def get_any(self, entry_id):
+        path = self._path(entry_id)
+        return self._read(path) if path else None
+
+    def get(self, entry_id):
+        path = self._path(entry_id)
+        if not path or path.with_suffix(".deleted").exists():
+            return None
+        record = self._read(path)
+        return record if record and not record.deleted_at else None
+
+    def add(self, record):
+        require_root(self.root / "records")
+        record = AnalysisHistoryRecord.model_validate(redact(record.model_dump()))
+        UUID(record.id)
+        payload = dict(schema_version=1, record_id=record.id, project_id=self.project_id,
+                       created_at=record.created_at.isoformat(), analysis=record.model_dump(mode="json"))
+        path = self.root / "records" / record.created_at.strftime("%Y-%m") / f"{record.id}.json"
+        publish(path, json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
+        return record
+
+    def soft_delete(self, entry_id, deleted_at):
+        path = self._path(entry_id)
+        if not path or not self._read(path):
+            return False
+        marker = path.with_suffix(".deleted")
+        if marker.exists():
+            return True
+        try:
+            publish(marker, deleted_at.isoformat().encode())
+        except HistoryStorageUnavailable:
+            if not marker.exists():
+                raise
+        return True
 
 history_repository = HistoryRepository()

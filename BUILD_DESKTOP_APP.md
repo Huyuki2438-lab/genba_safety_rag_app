@@ -1,42 +1,27 @@
-# デスクトップアプリ化 (GenbaSafetyRAGApp.exe)
+# KY写真解析.exe のビルド
 
-## ビルド手順
+## 前提
+
+- Windows 10/11、Edge WebView2 Runtime
+- PostgreSQLとNASの設定値を入れた `.env`
+- Node.js と Python仮想環境
 
 ```powershell
-# 1回だけ: 依存関係インストール
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 npm install
-
-# ビルド (React build + Playwright Chromium取得 + PyInstaller onedir + アセット配置)
 .\build_exe.ps1
 ```
 
-出力先: `dist\GenbaSafetyRAGApp\` フォルダ一式。このフォルダを丸ごとネットワーク共有へコピーする。
+出力は `dist\KY写真解析\KY写真解析.exe` と依存ファイル一式です。`build_exe.ps1` はReactのビルド、PDF生成用Chromiumの取得、PyInstallerのonedirビルドを順に行います。
 
-## 配布フォルダ構成
+`KY写真解析.exe` だけを取り出さず、`dist\KY写真解析` フォルダ全体をローカルPCへ配布してください。`pw-browsers` がPDF生成用、`_internal` がPython/DLL依存ファイルです。
 
-```
-GenbaSafetyRAGApp\
-  GenbaSafetyRAGApp.exe   ← 利用者がダブルクリックするのはこれ
-  _internal\               ← PyInstallerが同梱したPython本体・ライブラリ一式
-  dist\                    ← Reactビルド成果物 (index.html, assets/)
-  static\                  ← pdf.css等
-  templates\                ← report.html等 (Jinja2テンプレート)
-  pw-browsers\              ← PDF生成用Chromium(Playwright)を同梱
-  .env                      ← APIキー等 (配布時に各拠点用に書き換え可能)
-```
+## 配布前の素材確認
 
-## 利用者の操作
+ビルド処理は `static` と `templates` を丸ごとコピーせず、実行に必要な
+`static/pdf.css`、アプリアイコン2種、`templates/report.html` だけを同梱します。
+`history`、現場写真、ユーザー生成PDF、第三者サービスのスクリーンショット、
+ローカル用サンプルは配布物に含めません。アプリアイコンを含む配布素材の権利情報は
+[ASSET_PROVENANCE.md](ASSET_PROVENANCE.md) で確認・記録してください。
 
-1. ネットワーク共有フォルダ (`\\サーバー名\共有フォルダ\GenbaSafetyRAGApp\`) を開く
-2. `GenbaSafetyRAGApp.exe` をダブルクリック
-3. 専用ウィンドウでアプリが開く
-4. 作業する
-5. 右上の「×」で終了 (内部サーバー・WebView2・すべて終了)
-
-コマンドプロンプト、ブラウザのアドレスバー、Pythonの存在は一切表示されない。
-
-## 開発時 (これまで通り)
-
-`npm run dev` / `npm run dev:backend` はこれまで通り使用可能。`desktop_app.py` は
-配布用のexe起動経路にのみ影響し、開発時の挙動 (BASE_DIR、HISTORY_DIR等) は変更していない。
+共有DB／NASの設定と配布手順は [DEPLOYMENT.md](DEPLOYMENT.md) を参照してください。

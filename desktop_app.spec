@@ -56,7 +56,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="GenbaSafetyRAGApp",
+    name="KY写真解析",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -77,5 +77,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="GenbaSafetyRAGApp",
+    name="KY写真解析",
 )

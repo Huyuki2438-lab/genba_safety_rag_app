@@ -7,8 +7,10 @@ python-dotenv
 playwright
 requests
 tzdata
+SQLAlchemy>=2.0,<3.0
+psycopg[binary]>=3.2,<4.0
 
-# デスクトップアプリ化 (desktop_app.py) 用
+# Desktop application dependencies
 pywebview
 pythonnet
 pyinstaller

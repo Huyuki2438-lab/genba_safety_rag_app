@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     DATA_DIR: Path = BASE_DIR / "data"
     REFERENCE_PDF_DIR: Path = BASE_DIR / "reference_pdfs"  # 現状はルート直下
     HISTORY_DIR: Path = BASE_DIR / "history"            # 現状はルート直下
+    # Shared history storage. These values are deployed in the company .env.
+    DATABASE_URL: str = ""
+    PHOTO_STORAGE_DIR: Path = BASE_DIR / "data" / "photos"
+    DEFAULT_CREATED_BY: str = ""
 
     # AI Target Configuration (Static for now, could be moved to json/yaml)
     TARGETS: dict[str, TargetConfig] = {

@@ -1,80 +1,31 @@
 import { HISTORY_ENDPOINT } from "../constants/endpoints";
-import { isAiMode } from "../types/ai";
+import type { AiMode } from "../types/ai";
 import type { AnalysisHistoryEntry } from "../types/analysis";
 
-type AnalysisHistoryApiResponse = {
-  history?: unknown;
+export type HistoryFilters = { dateFrom?: string; dateTo?: string; siteName?: string; workContent?: string; createdBy?: string; keyword?: string };
+export type CreateHistoryInput = { imageName: string; imageMimeType: string; imageBase64: string; mode: AiMode; providerDisplayLabel: string; model: string; markdown: string; siteName: string; workContent: string; mainRisk: string };
+
+const readError = async (response: Response): Promise<string> => {
+  try { const data: unknown = await response.json(); if (data && typeof data === "object" && "detail" in data && typeof data.detail === "string") return data.detail; } catch { /* not JSON */ }
+  return "共有データへ接続できません。ネットワーク接続を確認してください。";
 };
 
-const toOptionalString = (value: unknown): string | undefined =>
-  typeof value === "string" ? value : undefined;
-
-const isAnalysisHistoryEntry = (value: unknown): value is AnalysisHistoryEntry => {
-  if (!value || typeof value !== "object") return false;
-
-  const candidate = value as Partial<AnalysisHistoryEntry>;
-  const hasValidOptionalString = (field: unknown): boolean =>
-    field === undefined || field === null || typeof field === "string";
-
-  return (
-    typeof candidate.id === "string" &&
-    candidate.id.length > 0 &&
-    typeof candidate.createdAt === "string" &&
-    candidate.createdAt.length > 0 &&
-    typeof candidate.imageName === "string" &&
-    candidate.imageName.length > 0 &&
-    isAiMode(candidate.mode) &&
-    typeof candidate.providerDisplayLabel === "string" &&
-    candidate.providerDisplayLabel.length > 0 &&
-    typeof candidate.model === "string" &&
-    candidate.model.length > 0 &&
-    typeof candidate.markdown === "string" &&
-    hasValidOptionalString(candidate.historyFolder) &&
-    hasValidOptionalString(candidate.imageFileName) &&
-    hasValidOptionalString(candidate.imageMimeType) &&
-    hasValidOptionalString(candidate.imageBase64) &&
-    hasValidOptionalString(candidate.imageUrl)
-  );
+export const fetchAnalysisHistory = async (filters: HistoryFilters = {}): Promise<AnalysisHistoryEntry[]> => {
+  const params = new URLSearchParams();
+  [["date_from", filters.dateFrom], ["date_to", filters.dateTo], ["site_name", filters.siteName], ["work_content", filters.workContent], ["created_by", filters.createdBy], ["keyword", filters.keyword]].forEach(([key, value]) => { const normalized = value?.trim(); if (normalized) params.set(String(key), normalized); });
+  const response = await fetch(`${HISTORY_ENDPOINT}${params.size ? `?${params}` : ""}`);
+  if (!response.ok) throw new Error(await readError(response));
+  const data: unknown = await response.json();
+  return data && typeof data === "object" && "history" in data && Array.isArray(data.history) ? data.history as AnalysisHistoryEntry[] : [];
 };
 
-const normalizeHistoryFromResponse = (value: unknown): AnalysisHistoryEntry[] => {
-  if (!value || typeof value !== "object") return [];
-
-  const candidate = value as AnalysisHistoryApiResponse;
-  if (!Array.isArray(candidate.history)) return [];
-
-  return candidate.history
-    .filter((entry): entry is AnalysisHistoryEntry => isAnalysisHistoryEntry(entry))
-    .map((entry) => ({
-      ...entry,
-      historyFolder: toOptionalString(entry.historyFolder),
-      imageFileName: toOptionalString(entry.imageFileName),
-      imageMimeType: toOptionalString(entry.imageMimeType),
-      imageBase64: toOptionalString(entry.imageBase64),
-      imageUrl: toOptionalString(entry.imageUrl)
-    }));
+export const createAnalysisHistory = async (entry: CreateHistoryInput): Promise<AnalysisHistoryEntry> => {
+  const response = await fetch(HISTORY_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) });
+  if (!response.ok) throw new Error(await readError(response));
+  return await response.json() as AnalysisHistoryEntry;
 };
 
-export const fetchAnalysisHistory = async (): Promise<AnalysisHistoryEntry[]> => {
-  try {
-    const response = await fetch(HISTORY_ENDPOINT);
-    if (!response.ok) return [];
-
-    const data: unknown = await response.json();
-    return normalizeHistoryFromResponse(data);
-  } catch {
-    return [];
-  }
-};
-
-export const saveAnalysisHistory = async (
-  history: AnalysisHistoryEntry[]
-): Promise<void> => {
-  await fetch(HISTORY_ENDPOINT, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ history })
-  });
+export const deleteAnalysisHistory = async (entryId: string): Promise<void> => {
+  const response = await fetch(`${HISTORY_ENDPOINT}/${encodeURIComponent(entryId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await readError(response));
 };

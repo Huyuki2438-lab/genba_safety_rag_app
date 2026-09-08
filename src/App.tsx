@@ -5,6 +5,7 @@ import { DevicePreviewFrame } from "./components/DevicePreviewFrame";
 import { Header } from "./components/Header";
 import { ImageUploadPanel } from "./components/ImageUploadPanel";
 import { ResultTabs } from "./components/ResultTabs";
+import { HistoryView } from "./components/HistoryView";
 import { PDF_ENDPOINT } from "./constants/endpoints";
 import { useGeminiSafetyAnalysis } from "./hooks/useGeminiSafetyAnalysis";
 import { isAiMode } from "./types/ai";
@@ -14,6 +15,7 @@ import { fileToBase64, getImageMimeType } from "./utils/imageFile";
 import { renderMarkdownToHtml } from "./utils/renderMarkdownToHtml";
 import { sanitizeHtml } from "./utils/sanitizeHtml";
 import type { AiMode } from "./types/ai";
+import type { AnalysisHistoryEntry } from "./types/analysis";
 import type { ResultTabKey } from "./types/ui";
 
 const AI_MODE_STORAGE_KEY = "genba_safety_rag_app.ai_mode";
@@ -55,15 +57,6 @@ const fetchImageAsDataUrl = async (imageUrl: string): Promise<string | null> => 
   return blobToDataUrl(blob);
 };
 
-const toDataUrlFromHistoryEntry = (
-  imageBase64?: string,
-  imageMimeType?: string
-): string | null => {
-  if (!imageBase64) return null;
-  const mimeType = imageMimeType?.trim() || "image/jpeg";
-  return `data:${mimeType};base64,${imageBase64}`;
-};
-
 const downloadPdfBlob = (blob: Blob, fileName: string): void => {
   const downloadUrl = URL.createObjectURL(blob);
   const anchor = window.document.createElement("a");
@@ -78,6 +71,10 @@ function App() {
   const [activeTab, setActiveTab] = useState<ResultTabKey>("overview");
   const [mode, setMode] = useState<AiMode>(() => getInitialAiMode());
   const [isSavingPdf, setIsSavingPdf] = useState(false);
+  const [page, setPage] = useState<"create" | "history">("create");
+  const [siteName, setSiteName] = useState("");
+  const [workContent, setWorkContent] = useState("");
+  const [mainRisk, setMainRisk] = useState("");
   const {
     isAnalyzing,
     analysisMarkdown,
@@ -128,10 +125,7 @@ function App() {
         ? await fileToDataUrl(selectedImage)
         : activeHistoryEntry?.imageUrl
           ? await fetchImageAsDataUrl(activeHistoryEntry.imageUrl)
-          : toDataUrlFromHistoryEntry(
-              activeHistoryEntry?.imageBase64,
-              activeHistoryEntry?.imageMimeType
-            );
+          : null;
       const printableBodyHtml = buildPrintableBodyHtml({
         generatedAtText,
         imagePreviewUrl: imageDataUrl,
@@ -170,16 +164,27 @@ function App() {
   };
 
   const canSavePdf = analysisMarkdown.trim().length > 0 && !isAnalyzing;
-  const handleSelectHistory = (historyId: string): void => {
+  const handleSelectHistory = (entry: AnalysisHistoryEntry): void => {
     setSelectedImage(null);
-    showHistoryEntry(historyId);
+    setSiteName(entry.siteName);
+    setWorkContent(entry.workContent);
+    setMainRisk(entry.mainRisk);
+    showHistoryEntry(entry);
   };
+
+  if (page === "history") {
+    return <div className="app-shell"><Header /><HistoryView onOpenKy={() => setPage("create")} onSelect={handleSelectHistory} /></div>;
+  }
 
   return (
     <div className="app-shell">
       <Header />
 
       <main className="app-main">
+        <nav className="app-navigation" aria-label="メインメニュー">
+          <button type="button" className="nav-button is-active">KY作成</button>
+          <button type="button" className="nav-button" onClick={() => setPage("history")}>履歴</button>
+        </nav>
         <AiSettingsStatusBar
           mode={mode}
           onModeChange={setMode}
@@ -194,10 +199,17 @@ function App() {
               onImageChange={setSelectedImage}
             />
 
+            <section className="upload-panel metadata-panel">
+              <h2 className="panel-title">2. 記録情報</h2>
+              <label>現場名<input value={siteName} onChange={(event) => setSiteName(event.target.value)} placeholder="例：芝原" /></label>
+              <label>作業内容<input value={workContent} onChange={(event) => setWorkContent(event.target.value)} placeholder="例：掘削" /></label>
+              <label>主な危険<input value={mainRisk} onChange={(event) => setMainRisk(event.target.value)} placeholder="例：重機接触" /></label>
+            </section>
+
             <AnalysisPanel
               isAnalyzing={isAnalyzing}
               onAnalyze={() => {
-                void analyzeSelectedImage(selectedImage);
+                void analyzeSelectedImage(selectedImage, { siteName, workContent, mainRisk });
               }}
             />
           </section>
@@ -211,7 +223,10 @@ function App() {
                 analysisMarkdown={analysisMarkdown}
                 analysisHistory={analysisHistory}
                 activeHistoryId={activeHistoryId}
-                onSelectHistory={handleSelectHistory}
+                onSelectHistory={(historyId) => {
+                  const entry = analysisHistory.find((item) => item.id === historyId);
+                  if (entry) handleSelectHistory(entry);
+                }}
                 errorMessage={errorMessage}
                 canSaveAsPdf={canSavePdf}
                 isSavingPdf={isSavingPdf}

@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-APP_NAME = "GenbaSafetyRAGApp"
+APP_NAME = "KY写真解析"
 CONTROL_PORT = 51837  # 同一PC二重起動検知専用のローカルポート (mutex代わり)
 STARTUP_TIMEOUT_SEC = 20
 
@@ -176,7 +176,6 @@ def main() -> int:
         return 0
 
     # 書き込み先をローカルPC固定にする (共有フォルダ上でのJSON同時書き込み破損を回避)
-    os.environ.setdefault("HISTORY_DIR", str(local_root / "history"))
     os.environ.setdefault("DATA_DIR", str(local_root / "data"))
 
     # playwright(PDF生成用Chromium) はアプリ配布物に同梱したものを使う
@@ -233,7 +232,7 @@ def main() -> int:
         return 1
 
     window = webview.create_window(
-        "現場安全AI (KY)",
+        "KY写真解析",
         url=f"http://127.0.0.1:{port}/",
         width=1400,
         height=900,

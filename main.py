@@ -12,8 +12,6 @@ from backend.app.api.router import api_router
 def create_app() -> FastAPI:
     app = FastAPI()
 
-    history_dir = settings.HISTORY_DIR
-    history_dir.mkdir(parents=True, exist_ok=True)
 
     # React build assets (JS/CSS)
     dist_assets_dir = settings.BASE_DIR / "dist" / "assets"
@@ -23,8 +21,9 @@ def create_app() -> FastAPI:
     # Legacy static files (pdf.css used by template_service)
     app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
 
-    # History files (images etc.)
-    app.mount("/history", StaticFiles(directory=history_dir), name="history")
+    # Original photos are held in the shared NAS directory, never in PostgreSQL.
+    # check_dir=False lets the desktop app start even when the NAS is temporarily offline.
+    app.mount("/history", StaticFiles(directory=settings.PHOTO_STORAGE_DIR, check_dir=False), name="history")
 
     app.include_router(api_router)
     return app

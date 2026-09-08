@@ -22,11 +22,13 @@ export type AnalyzeImageSafetyResult = {
 export type AnalysisHistoryEntry = {
   id: string;
   createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  siteName: string;
+  workContent: string;
+  mainRisk: string;
   imageName: string;
-  historyFolder?: string;
-  imageFileName?: string;
   imageMimeType?: string;
-  imageBase64?: string;
   imageUrl?: string;
   mode: AiMode;
   providerDisplayLabel: string;

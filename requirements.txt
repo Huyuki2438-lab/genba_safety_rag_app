@@ -7,6 +7,8 @@ python-dotenv
 playwright
 requests
 tzdata
+openpyxl
+Pillow
 
 # Desktop application dependencies
 pyinstaller

@@ -10,6 +10,7 @@ DIST = ROOT / "dist"
 NAS = DIST / "01_NASへ配置" / "KY安全管理"
 PC = DIST / "02_各PCへ配置" / "KY安全管理"
 DOCS = DIST / "03_管理者向け資料"
+NAS_UNC_ROOT = r"\\landisk-87a5d6\disk1\KY検出システムデータ\KY安全管理"
 
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,7 +32,7 @@ def main():
     # Preserve per-site configuration on subsequent builds.
     if not (PC / "config.json").exists():
         write(PC / "config.json", json.dumps({"project_id": "001", "project_name": "芝原改良工事",
-            "data_root": r"\\landisk-ee6245\disk1\KY安全管理\001_芝原改良工事\data"}, ensure_ascii=False, indent=2))
+            "data_root": NAS_UNC_ROOT + r"\001_芝原改良工事\data"}, ensure_ascii=False, indent=2))
     secret = "GEMINI_API_KEY=" + key + "\n"
     for name in ("GEMINI_A_MODEL", "GEMINI_B_API_KEY", "GEMINI_B_MODEL", "VERTEX_API_KEY", "VERTEX_MODEL", "VERTEX_PROJECT_ID", "VERTEX_LOCATION"):
         if env.get(name):
@@ -51,8 +52,8 @@ APIキーは設定済みです。通常、設定変更は不要です。フォ�
 """)
     write(NAS / "README_NAS.txt", """
 【NAS管理者向け】
-01_NASへ配置内の「KY安全管理」をNASのdisk1共有内へフォルダとして配置します。
-例：\\\\landisk-ee6245\\disk1\\KY安全管理
+01_NASへ配置内の「KY安全管理」を次のフォルダへ配置します。
+例：\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理
 NASはデータ保管だけを担当します。EXE、secrets.env、APIキー、ログは置きません。
 利用者には各現場のdata以下で一覧表示・読み取り・作成・書き込み・名前変更・削除の権限が必要です。
 新しい現場はtemplate_projectをコピーして「002_○○工事」等へ改名します。
@@ -69,7 +70,8 @@ NAS交換時は全員終了→フォルダ全体コピー→権限再設定→�
 【初回導入】
 1. 01_NASへ配置のKY安全管理をNASへコピーし、共有名と権限を設定します。
 2. 02_各PCへ配置のKY安全管理/config.jsonを実際のUNCパスに合わせます。APIキーはsecrets.envに設定済みです。
-   初期値は確認できたNASのdisk1共有です。NAS名・共有名が異なる場合は配布前に変更が必要です。
+   初期値：\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理\\001_芝原改良工事\\data
+   NAS名・共有名・現場フォルダが異なる場合は配布前に変更が必要です。
 3. このPC用フォルダ（EXE、config.json、secrets.env、README.txtの4ファイル）を各PCへコピーします。
 4. EXEをダブルクリック。写真→分析→履歴→PDF保存→別PCで同じ履歴・写真・PDFを確認します。
 5. 両PCから同時に保存し、履歴が2件増えることを確認します。実NASでこの受入確認を行ってください。

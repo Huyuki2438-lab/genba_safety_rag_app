@@ -6,7 +6,7 @@ import { Header } from "./components/Header";
 import { ImageUploadPanel } from "./components/ImageUploadPanel";
 import { ResultTabs } from "./components/ResultTabs";
 import { HistoryView } from "./components/HistoryView";
-import { PDF_ENDPOINT } from "./constants/endpoints";
+import { EXCEL_ENDPOINT, PDF_ENDPOINT } from "./constants/endpoints";
 import { useGeminiSafetyAnalysis } from "./hooks/useGeminiSafetyAnalysis";
 import { isAiMode } from "./types/ai";
 import { buildPrintableBodyHtml } from "./utils/buildPrintableBodyHtml";
@@ -57,7 +57,7 @@ const fetchImageAsDataUrl = async (imageUrl: string): Promise<string | null> => 
   return blobToDataUrl(blob);
 };
 
-const downloadPdfBlob = (blob: Blob, fileName: string): void => {
+const downloadBlob = (blob: Blob, fileName: string): void => {
   const downloadUrl = URL.createObjectURL(blob);
   const anchor = window.document.createElement("a");
   anchor.href = downloadUrl;
@@ -66,11 +66,27 @@ const downloadPdfBlob = (blob: Blob, fileName: string): void => {
   URL.revokeObjectURL(downloadUrl);
 };
 
+type ReportExportFormat = "pdf" | "excel";
+
+type ReportExportData = {
+  recordId: string | null;
+  fileBaseName: string;
+  generatedAtText: string;
+  markdown: string;
+  reportHtml: string;
+  imageDataUrl: string | null;
+  siteName: string;
+  workContent: string;
+  mainRisk: string;
+  createdBy: string;
+};
+
 function App() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState<ResultTabKey>("overview");
   const [mode, setMode] = useState<AiMode>(() => getInitialAiMode());
   const [isSavingPdf, setIsSavingPdf] = useState(false);
+  const [isSavingExcel, setIsSavingExcel] = useState(false);
   const [page, setPage] = useState<"create" | "history">("create");
   const [siteName, setSiteName] = useState("");
   useEffect(() => { void fetch("/api/v1/project").then(r => r.json()).then(p => setSiteName(p.project_name)).catch(() => {}); }, []);
@@ -89,11 +105,6 @@ function App() {
     runtimeConfig
   } = useGeminiSafetyAnalysis(mode);
 
-  const analysisHtml = useMemo(
-    () => renderMarkdownToHtml(analysisMarkdown),
-    [analysisMarkdown]
-  );
-
   const localImagePreviewUrl = useMemo(() => {
     if (!selectedImage) return null;
     return URL.createObjectURL(selectedImage);
@@ -110,60 +121,112 @@ function App() {
     window.localStorage.setItem(AI_MODE_STORAGE_KEY, mode);
   }, [mode]);
 
-  const handleSaveAsPdf = async () => {
-    if (typeof window === "undefined") return;
-    if (!analysisHtml.trim()) return;
+  const prepareReportExport = async (historyEntry?: AnalysisHistoryEntry): Promise<ReportExportData | null> => {
+    if (typeof window === "undefined") return null;
+    const markdown = historyEntry?.markdown ?? analysisMarkdown;
+    if (!markdown.trim()) return null;
 
-    const reportHtml = sanitizeHtml(analysisHtml);
-    if (!reportHtml) return;
+    const reportHtml = sanitizeHtml(renderMarkdownToHtml(markdown));
+    if (!reportHtml) return null;
 
     const generatedAt = new Date();
     const generatedAtText = formatDisplayTimestamp(generatedAt);
-    const fileName = `安全分析レポート_${formatFileTimestamp(generatedAt)}.pdf`;
-    setIsSavingPdf(true);
+    const savedImageUrl = historyEntry?.imageUrl ?? activeHistoryEntry?.imageUrl;
+    const imageDataUrl = !historyEntry && selectedImage
+      ? await fileToDataUrl(selectedImage)
+      : savedImageUrl
+        ? await fetchImageAsDataUrl(savedImageUrl)
+        : null;
+    return {
+      recordId: historyEntry?.id ?? activeHistoryId,
+      fileBaseName: `安全分析レポート_${formatFileTimestamp(generatedAt)}`,
+      generatedAtText,
+      markdown,
+      reportHtml,
+      imageDataUrl,
+      siteName: historyEntry?.siteName ?? siteName,
+      workContent: historyEntry?.workContent ?? workContent,
+      mainRisk: historyEntry?.mainRisk ?? mainRisk,
+      createdBy: historyEntry?.createdBy ?? activeHistoryEntry?.createdBy ?? ""
+    };
+  };
+
+  const generateReport = async (
+    format: ReportExportFormat,
+    historyEntry?: AnalysisHistoryEntry
+  ): Promise<void> => {
+    const report = await prepareReportExport(historyEntry);
+    if (!report) return;
+    const isPdf = format === "pdf";
+    const extension = isPdf ? "pdf" : "xlsx";
+    const fileName = `${report.fileBaseName}.${extension}`;
+    const endpoint = isPdf ? PDF_ENDPOINT : EXCEL_ENDPOINT;
+    if (isPdf) setIsSavingPdf(true);
+    else setIsSavingExcel(true);
 
     try {
-      const imageDataUrl = selectedImage
-        ? await fileToDataUrl(selectedImage)
-        : activeHistoryEntry?.imageUrl
-          ? await fetchImageAsDataUrl(activeHistoryEntry.imageUrl)
-          : null;
-      const printableBodyHtml = buildPrintableBodyHtml({
-        generatedAtText,
-        imagePreviewUrl: imageDataUrl,
-        reportHtml,
-        reportTitle: PDF_REPORT_TITLE
-      });
-
-      const response = await fetch(PDF_ENDPOINT, {
+      const body = isPdf
+        ? {
+            template_name: "report.html",
+            output_filename: fileName,
+            engine: "playwright",
+            record_id: report.recordId,
+            context: {
+              title: PDF_REPORT_TITLE,
+              body_html: buildPrintableBodyHtml({
+                generatedAtText: report.generatedAtText,
+                imagePreviewUrl: report.imageDataUrl,
+                reportHtml: report.reportHtml,
+                reportTitle: PDF_REPORT_TITLE
+              })
+            }
+          }
+        : {
+            output_filename: fileName,
+            record_id: report.recordId,
+            title: PDF_REPORT_TITLE,
+            generated_at: report.generatedAtText,
+            markdown: report.markdown,
+            image_data_url: report.imageDataUrl,
+            site_name: report.siteName,
+            work_content: report.workContent,
+            main_risk: report.mainRisk,
+            created_by: report.createdBy
+          };
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          template_name: "report.html",
-          output_filename: fileName,
-          engine: "playwright",
-          record_id: activeHistoryId,
-          context: {
-            title: PDF_REPORT_TITLE,
-            body_html: printableBodyHtml
-          }
-        })
+        body: JSON.stringify(body)
       });
 
       if (!response.ok) {
-        throw new Error((await response.json()).detail || "PDFを保存できませんでした。");
+        throw new Error((await response.json()).detail || `${isPdf ? "PDF" : "Excel"}を保存できませんでした。`);
       }
 
-      const pdfBlob = await response.blob();
-      downloadPdfBlob(pdfBlob, fileName);
-    } catch (error) {
+      downloadBlob(await response.blob(), fileName);
+    } finally {
+      if (isPdf) setIsSavingPdf(false);
+      else setIsSavingExcel(false);
+    }
+  };
+
+  const generatePdf = (historyEntry?: AnalysisHistoryEntry): Promise<void> => generateReport("pdf", historyEntry);
+  const generateExcel = (historyEntry?: AnalysisHistoryEntry): Promise<void> => generateReport("excel", historyEntry);
+
+  const handleSaveAsPdf = (): void => {
+    void generatePdf().catch((error: unknown) => {
       console.error("PDF保存に失敗しました:", error);
       window.alert(error instanceof Error ? error.message : "PDFの保存に失敗しました。");
-    } finally {
-      setIsSavingPdf(false);
-    }
+    });
+  };
+
+  const handleSaveAsExcel = (): void => {
+    void generateExcel().catch((error: unknown) => {
+      console.error("Excel保存に失敗しました:", error);
+      window.alert(error instanceof Error ? error.message : "Excelの保存に失敗しました。");
+    });
   };
 
   const canSavePdf = analysisMarkdown.trim().length > 0 && !isAnalyzing;
@@ -176,7 +239,7 @@ function App() {
   };
 
   if (page === "history") {
-    return <div className="app-shell"><Header /><HistoryView onOpenKy={() => setPage("create")} onSelect={handleSelectHistory} /></div>;
+    return <div className="app-shell"><Header /><HistoryView onOpenKy={() => setPage("create")} onSelect={handleSelectHistory} onSaveAsPdf={generatePdf} onSaveAsExcel={generateExcel} isSavingPdf={isSavingPdf} isSavingExcel={isSavingExcel} /></div>;
   }
 
   return (
@@ -235,6 +298,9 @@ function App() {
                 canSaveAsPdf={canSavePdf}
                 isSavingPdf={isSavingPdf}
                 onSaveAsPdf={handleSaveAsPdf}
+                canSaveAsExcel={canSavePdf}
+                isSavingExcel={isSavingExcel}
+                onSaveAsExcel={handleSaveAsExcel}
               />
             </DevicePreviewFrame>
           </section>

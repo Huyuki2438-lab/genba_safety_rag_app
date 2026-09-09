@@ -7,8 +7,9 @@ a = Analysis([str(root / "desktop_app.py")], pathex=[str(root)],
            (str(root / "static" / "pdf.css"), "static"),
            (str(root / "static" / "icons" / "app_icon.ico"), "static/icons"),
            (str(root / "backend/app/core/prompts/templates"), "backend/app/core/prompts/templates")],
-    hiddenimports=["uvicorn.loops.asyncio", "uvicorn.protocols.http.h11_impl", "uvicorn.lifespan.on"],
-    excludes=["webview", "pythonnet", "clr", "sqlalchemy", "psycopg", "tkinter", "numpy", "PIL", "pytest"],
+    hiddenimports=["uvicorn.loops.asyncio", "uvicorn.protocols.http.h11_impl", "uvicorn.lifespan.on",
+                   "openpyxl", "openpyxl.drawing.image", "PIL.Image"],
+    excludes=["webview", "pythonnet", "clr", "sqlalchemy", "psycopg", "tkinter", "numpy", "pytest"],
     noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name="KY安全管理", console=False,

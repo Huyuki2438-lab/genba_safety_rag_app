@@ -27,6 +27,9 @@ type ResultTabsProps = {
   canSaveAsPdf: boolean;
   isSavingPdf: boolean;
   onSaveAsPdf: () => void;
+  canSaveAsExcel: boolean;
+  isSavingExcel: boolean;
+  onSaveAsExcel: () => void;
 };
 
 const tabItems: Array<{
@@ -81,7 +84,10 @@ export function ResultTabs({
   errorMessage,
   canSaveAsPdf,
   isSavingPdf,
-  onSaveAsPdf
+  onSaveAsPdf,
+  canSaveAsExcel,
+  isSavingExcel,
+  onSaveAsExcel
 }: ResultTabsProps) {
   const parsed = useMemo(() => parseAnalysisSections(analysisMarkdown), [analysisMarkdown]);
   const fullReportHtml = useMemo(
@@ -170,6 +176,24 @@ export function ResultTabs({
               <>
                 <Download className="size-4" aria-hidden="true" />
                 PDFとして保存
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            className="result-save-button"
+            onClick={onSaveAsExcel}
+            disabled={!canSaveAsExcel || isSavingExcel}
+          >
+            {isSavingExcel ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Excel出力準備中...
+              </>
+            ) : (
+              <>
+                <Download className="size-4" aria-hidden="true" />
+                Excelとして保存
               </>
             )}
           </button>

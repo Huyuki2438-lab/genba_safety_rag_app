@@ -12,7 +12,7 @@ from backend.app.repositories.history_repository import HistoryRepository
 from backend.app.core.shared_storage import publish, HistoryStorageUnavailable
 
 if __name__ == '__main__':
-    share=Path(r'\\landisk-ee6245\disk1')
+    share=Path(r'\\landisk-87a5d6\disk1\KY検出システムデータ\KY安全管理')
     root=share/('__KY_distribution_test_'+uuid.uuid4().hex)
     resolved=root.resolve()
     assert resolved.parent == share.resolve() and resolved.name.startswith('__KY_distribution_test_')

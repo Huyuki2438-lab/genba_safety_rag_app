@@ -40,10 +40,10 @@ C:\Users\doboku31\Desktop\AI・開発\genba_safety_rag_app\dist
 
 dist\01_NASへ配置\KY安全管理
 
-コピー先：\\landisk-ee6245\disk1\
-コピー後：\\landisk-ee6245\disk1\KY安全管理
+コピー先：\\landisk-87a5d6\disk1\KY検出システムデータ\
+コピー後：\\landisk-87a5d6\disk1\KY検出システムデータ\KY安全管理
 
-実環境を確認した結果、landisk-ee6245の既存共有はdisk1であり、KY安全管理という共有名は存在しませんでした。そのため要件書の例へdisk1を加え、フォルダコピーで導入できるconfigにしています。
+現在のNASでは、\`KY検出システムデータ\` 配下の \`KY安全管理\` をデータ保管先とします。各PCのconfig.jsonはこの構成に合わせます。
 
 6. 各PCへコピーするフォルダ
 
@@ -88,7 +88,7 @@ KY安全管理/
 {
   "project_id": "001",
   "project_name": "芝原改良工事",
-  "data_root": "\\\\landisk-ee6245\\disk1\\KY安全管理\\001_芝原改良工事\\data"
+  "data_root": "\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理\\001_芝原改良工事\\data"
 }
 ```
 

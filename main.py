@@ -49,7 +49,7 @@ def create_app():
         return shared_file("images", relative, {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"})
     @app.get("/reports/{relative:path}")
     def report(relative: str):
-        return shared_file("reports", relative, {".pdf"})
+        return shared_file("reports", relative, {".pdf", ".xlsx"})
     @app.get("/api/v1/project")
     def project():
         return {"project_id": settings.PROJECT_ID, "project_name": settings.PROJECT_NAME}

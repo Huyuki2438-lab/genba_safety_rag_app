@@ -71,7 +71,7 @@ def list_reports(entry_id: str):
         require_root(settings.DATA_DIR / "reports")
         folder = settings.DATA_DIR / "reports" / str(UUID(entry_id))
         return {"reports": [{"name": p.name, "url": f"/reports/{entry_id}/{p.name}"}
-                            for p in sorted(folder.glob("*.pdf"))]}
+                            for p in sorted(folder.glob("*")) if p.suffix.lower() in {".pdf", ".xlsx"}]}
     except (OSError, HistoryStorageUnavailable):
         raise HTTPException(status_code=503, detail=NETWORK_MESSAGE) from None
     except ValueError:
@@ -98,8 +98,9 @@ def export_history(entry_id: str):
                 "record_id": record.id, "analysis": record.model_dump(mode="json")}, ensure_ascii=False))
             photo = settings.PHOTO_STORAGE_DIR / record.photo_relative_path
             z.write(photo, "images/" + photo.name)
-            for pdf in (settings.DATA_DIR / "reports" / record.id).glob("*.pdf"):
-                z.write(pdf, "reports/" + pdf.name)
+            for report in (settings.DATA_DIR / "reports" / record.id).glob("*"):
+                if report.suffix.lower() in {".pdf", ".xlsx"}:
+                    z.write(report, "reports/" + report.name)
         content = archive.getvalue()
         name = f"{uuid4()}.zip"
         publish(settings.DATA_DIR / "export" / name, content)

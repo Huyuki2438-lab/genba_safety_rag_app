@@ -5,6 +5,7 @@ from backend.app.api.v1.history import router as history_router
 from backend.app.api.v1.pdf import router as pdf_router
 from backend.app.api.v1.excel import router as excel_router
 from backend.app.api.v1.settings import router as settings_router
+from backend.app.api.v1.setup import router as setup_router
 
 api_router = APIRouter()
 
@@ -17,3 +18,4 @@ api_router.include_router(history_router)
 api_router.include_router(pdf_router)
 api_router.include_router(excel_router)
 api_router.include_router(settings_router)
+api_router.include_router(setup_router)

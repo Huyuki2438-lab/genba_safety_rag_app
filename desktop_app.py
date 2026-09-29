@@ -8,6 +8,7 @@ import webbrowser
 import logging
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -15,7 +16,8 @@ from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-APP_NAME = "KY安全管理"
+from backend.app.core.app_paths import APP_NAME, local_data_root as _local_data_root, restart_flag_path
+
 CONTROL_PORT = int(os.environ.get("KY_CONTROL_PORT", "51837"))  # 同一PC二重起動検知専用のローカルポート (mutex代わり)
 STARTUP_TIMEOUT_SEC = 20
 
@@ -25,19 +27,6 @@ def _app_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
-
-
-def _local_data_root() -> Path:
-    """書き込み用データの保存先 (ローカルPC固定)。
-
-    アプリ本体はネットワーク共有上に置かれるため、複数PCが同時に
-    同じJSONファイルへ書き込むと破損する恐れがある。そのため履歴・
-    データ・ログはPC毎の LOCALAPPDATA 配下に保存する。
-    """
-    local_appdata = os.environ.get("LOCALAPPDATA")
-    if local_appdata:
-        return Path(local_appdata) / APP_NAME
-    return Path.home() / f".{APP_NAME.lower()}"
 
 
 def _setup_logging(log_dir: Path) -> logging.Logger:
@@ -151,6 +140,29 @@ class SingleInstanceGuard:
                 pass
 
 
+def _import_app_with_retry(logger: logging.Logger):
+    """`from main import app` の遅延インポートをリトライ付きで行う。
+
+    onefile化したEXEは起動のたびに同梱データを一時フォルダへ展開する。
+    設定変更後の自動再起動のように短時間で連続起動すると、ディスクI/O
+    (ウイルス対策ソフトのスキャン等)の混雑で展開完了前にモジュール読込が
+    始まり、一時的に "static" 等のフォルダが見つからないことがある。
+    数回だけ短い間隔で再試行し、それでも失敗する場合のみエラーとする。
+    """
+    last_exc: Exception | None = None
+    attempts = 8
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(0.5)
+        try:
+            from main import app
+            return app
+        except (RuntimeError, OSError, ImportError) as exc:
+            last_exc = exc
+            logger.warning("App import failed (attempt %s/%s), retrying: %s", attempt + 1, attempts, exc)
+    raise last_exc
+
+
 def main() -> int:
     app_dir = _app_dir()
     # Reject UNC and mapped network drives: secrets and runtime stay on PC.
@@ -164,8 +176,9 @@ def main() -> int:
         return 0
     server = None
     server_thread = None
+    result = 0
     try:
-        from main import app
+        app = _import_app_with_retry(logger)
         import uvicorn
         @app.post("/api/v1/shutdown")
         def shutdown():
@@ -194,14 +207,13 @@ def main() -> int:
         # tab is not a reliable application-lifecycle signal.
         while server_thread.is_alive():
             server_thread.join(timeout=0.5)
-        return 0
     except Exception as exc:
         logger.error("Startup or runtime failed (%s): %s", type(exc).__name__, exc)
         detail = str(exc).strip()
         message = f"起動できませんでした。\n\n{detail}" if detail else "起動できませんでした。"
         message += "\n\nconfig.json、secrets.envがEXEと同じフォルダにあることを確認してください。"
         _fatal_message_box(APP_NAME, message)
-        return 1
+        result = 1
     finally:
         if server:
             server.should_exit = True
@@ -209,6 +221,31 @@ def main() -> int:
             server_thread.join(timeout=100)
         guard.close()
         logger.info("Application stopped")
+
+    if result == 0 and restart_flag_path().exists():
+        # 初期設定/保存先変更の完了直後の再起動要求。新しい config.json を
+        # 反映させるため、設定を使い回さずプロセス自体を作り直す。
+        try:
+            restart_flag_path().unlink()
+        except OSError:
+            pass
+        try:
+            creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+            # PyInstaller onefile builds set _MEIPASS2 so a child of the same exe
+            # reuses the parent's extraction folder. That folder is torn down when
+            # this (exiting) process's bootloader cleans up, racing the new
+            # process's startup. Drop it so the relaunched exe extracts its own.
+            restart_env = {k: v for k, v in os.environ.items() if not k.upper().startswith("_MEI")}
+            subprocess.Popen([sys.executable, *sys.argv[1:]], close_fds=True, creationflags=creationflags, env=restart_env)
+            logger.info("Restarting application to apply new settings.")
+            # Give the new process's own onefile extraction a head start before
+            # this (exiting) process's bootloader starts tearing down its own
+            # extraction folder; avoids disk I/O contention between the two.
+            time.sleep(1.5)
+        except OSError as exc:
+            logger.error("Failed to restart application: %s", exc)
+            _fatal_message_box(APP_NAME, "設定を反映するための再起動に失敗しました。手動でアプリを再起動してください。")
+    return result
 
 
 if __name__ == "__main__":

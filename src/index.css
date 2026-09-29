@@ -849,4 +849,32 @@ body {
 }
 .history-page button:disabled { opacity: .45; cursor: default; }
 .app-header button { margin-top: 8px; }
+
+/* データ保存先の初期設定/設定画面 */
+.setup-wizard .app-main { align-items: center; justify-content: center; }
+.setup-wizard__card {
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  display: grid;
+  gap: 14px;
+}
+.setup-wizard__label { display: grid; gap: 6px; font-weight: 700; font-size: .95rem; }
+.setup-wizard__path-row { display: flex; gap: 8px; }
+.setup-wizard__path-row input {
+  flex: 1;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+}
+.setup-wizard__hint { margin: 0; font-size: .9rem; color: var(--text-muted); }
+.setup-wizard__status { margin: 0; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+.setup-wizard__status--ok { background: #ecfdf5; color: #065f46; }
+.setup-wizard__status--ng { background: #fef2f2; color: #991b1b; }
 .history-filters h2 { font-size: 1.2rem; font-weight: 800; }

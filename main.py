@@ -17,7 +17,12 @@ def _check_storage_at_startup():
 
     NASが一時的に切断中でもアプリ自体は起動できるようにするため、
     ここでは例外を送出せずログのみに記録する（画面へは各APIの503応答で通知）。
+    データ保存先が未設定（初期設定画面を表示する状態）の場合は、まだ意味のある
+    保存先が決まっていないためチェック自体を行わない。
     """
+    if settings.SETUP_REQUIRED:
+        logger.info("データ保存先が未設定のため、起動時チェックをスキップします（初期設定画面を表示します）。")
+        return
     try:
         require_root(settings.DATA_DIR)
         check_writable(settings.DATA_DIR)

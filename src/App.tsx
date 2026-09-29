@@ -5,7 +5,11 @@ import { Header } from "./components/Header";
 import { ImageUploadPanel } from "./components/ImageUploadPanel";
 import { ResultTabs } from "./components/ResultTabs";
 import { HistoryView } from "./components/HistoryView";
+import { SettingsView } from "./components/SettingsView";
+import { SetupWizard } from "./components/SetupWizard";
+import { StorageUnavailableScreen } from "./components/StorageUnavailableScreen";
 import { EXCEL_ENDPOINT, PDF_ENDPOINT } from "./constants/endpoints";
+import { fetchSetupStatus, type SetupStatus } from "./lib/storageSetupApi";
 import { useGeminiSafetyAnalysis } from "./hooks/useGeminiSafetyAnalysis";
 import { buildPrintableBodyHtml } from "./utils/buildPrintableBodyHtml";
 import { formatDisplayTimestamp, formatFileTimestamp } from "./utils/formatTimestamp";
@@ -72,9 +76,22 @@ function App() {
   const [activeTab, setActiveTab] = useState<ResultTabKey>("overview");
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingExcel, setIsSavingExcel] = useState(false);
-  const [page, setPage] = useState<"create" | "history">("create");
+  const [page, setPage] = useState<"create" | "history" | "settings">("create");
   const [siteName, setSiteName] = useState("");
-  useEffect(() => { void fetch("/api/v1/project").then(r => r.json()).then(p => setSiteName(p.project_name)).catch(() => {}); }, []);
+  const [storageStatus, setStorageStatus] = useState<SetupStatus | null>(null);
+  const refreshStorageStatus = (): void => {
+    setStorageStatus(null);
+    void fetchSetupStatus()
+      .then(setStorageStatus)
+      .catch(() => setStorageStatus({ configured: false, dataRoot: null, storageType: null, reachable: false, reachableMessage: null }));
+  };
+  useEffect(refreshStorageStatus, []);
+  const storageReady = storageStatus?.configured && storageStatus.reachable;
+  useEffect(() => {
+    if (storageReady) {
+      void fetch("/api/v1/project").then(r => r.json()).then(p => setSiteName(p.project_name)).catch(() => {});
+    }
+  }, [storageReady]);
   const [workContent, setWorkContent] = useState("");
   const [mainRisk, setMainRisk] = useState("");
   const {
@@ -218,8 +235,30 @@ function App() {
     showHistoryEntry(entry);
   };
 
+  if (storageStatus === null) {
+    return <div className="app-shell"><Header /><main className="app-main"><p>読み込み中...</p></main></div>;
+  }
+
+  if (!storageStatus.configured) {
+    return <SetupWizard />;
+  }
+
+  if (!storageStatus.reachable && page !== "settings") {
+    return (
+      <StorageUnavailableScreen
+        message={storageStatus.reachableMessage}
+        onRetry={refreshStorageStatus}
+        onChangeStorage={() => setPage("settings")}
+      />
+    );
+  }
+
   if (page === "history") {
     return <div className="app-shell"><Header /><HistoryView onOpenKy={() => setPage("create")} onSelect={handleSelectHistory} onSaveAsPdf={generatePdf} onSaveAsExcel={generateExcel} isSavingPdf={isSavingPdf} isSavingExcel={isSavingExcel} /></div>;
+  }
+
+  if (page === "settings") {
+    return <div className="app-shell"><Header /><main className="app-main"><SettingsView onBack={() => { setPage("create"); refreshStorageStatus(); }} /></main></div>;
   }
 
   return (
@@ -230,6 +269,7 @@ function App() {
         <nav className="app-navigation" aria-label="メインメニュー">
           <button type="button" className="nav-button is-active">KY作成</button>
           <button type="button" className="nav-button" onClick={() => setPage("history")}>履歴</button>
+          <button type="button" className="nav-button" onClick={() => setPage("settings")}>設定</button>
         </nav>
 
         {pendingSave && !isAnalyzing && <div role="alert"><p>分析結果はまだ保存されていません。NAS復旧後、先に履歴で保存済みか確認してください。</p><button onClick={() => void retrySave()}>分析結果の保存を再試行</button></div>}

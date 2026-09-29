@@ -8,7 +8,7 @@ type AnalysisPanelProps = {
 export function AnalysisPanel({ isAnalyzing, onAnalyze }: AnalysisPanelProps) {
   return (
     <section className="analyze-panel">
-      <h2 className="panel-title">2. 危険分析</h2>
+      <h2 className="panel-title">3. 危険分析</h2>
       <p className="panel-description">選択した画像から危険要因・リスク・対策を抽出します。</p>
 
       <button

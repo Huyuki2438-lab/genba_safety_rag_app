@@ -166,7 +166,7 @@ if __name__ == "__main__":
                 ai_calls=[]
                 def mock_ai(route):
                     ai_calls.append(1)
-                    route.fulfill(json={"markdown": payload['markdown']})
+                    route.fulfill(json={"markdown": payload['markdown'], "used_model": payload['model']})
                 page.route('**/api/v1/analyze',mock_ai)
                 page.locator('input[type=file]').set_input_files(str(BASE/'fixture.png'))
                 page.route('**/api/v1/history', lambda route: route.fulfill(status=503, json={'detail':'共有フォルダに接続できません。'}))

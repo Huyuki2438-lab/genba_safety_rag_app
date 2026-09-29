@@ -48,19 +48,42 @@ class HistoryRepository:
             ) from None
         check_writable(self.root / "records")
 
-    def _files(self):
-        require_root(self.root / "records")
-        def failed(error):
-            raise error
-        try:
-            return [Path(base) / name for base, _, names in os.walk(self.root / "records", onerror=failed)
-                    for name in names if name.endswith(".json")]
-        except OSError:
-            raise HistoryStorageUnavailable("共有履歴を読み込めません。NASの接続と読み取り権限を確認してください。") from None
+    def _scan(self):
+        """records配下を再帰的に走査し、(パス, statの結果, .deletedマーカー一覧)を返す。
 
-    def _read(self, path):
+        os.scandirのDirEntryが持つstat情報をそのまま使うことで、NAS越しに
+        ファイルごとへ改めてstat()する分の往復(list()呼び出しのたびに件数分
+        発生していた)を省く。.deletedマーカーの有無も同じ走査結果から判定できる
+        ようにし、record毎に別途exists()する往復も省く。全件を毎回列挙する点は
+        変えていないため、他PC/他プロセスによる変更が即座に反映される既存の
+        整合性は保つ。
+        """
+        require_root(self.root / "records")
+        files = []
+        deleted_markers = set()
+        def walk(directory):
+            try:
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        if entry.is_dir(follow_symlinks=False):
+                            walk(entry.path)
+                        elif entry.name.endswith(".json"):
+                            files.append((Path(entry.path), entry.stat(follow_symlinks=False)))
+                        elif entry.name.endswith(".deleted"):
+                            deleted_markers.add(Path(entry.path))
+            except OSError as exc:
+                raise HistoryStorageUnavailable("共有履歴を読み込めません。NASの接続と読み取り権限を確認してください。") from exc
+        walk(self.root / "records")
+        return files, deleted_markers
+
+    def _files(self):
+        files, _ = self._scan()
+        return [path for path, _ in files]
+
+    def _read(self, path, stat=None):
         try:
-            stat = path.stat()
+            if stat is None:
+                stat = path.stat()
             stamp = (stat.st_mtime_ns, stat.st_size)
             with self._lock:
                 cached = self._cache.get(path)
@@ -87,10 +110,10 @@ class HistoryRepository:
 
     def list(self, *, created_from=None, created_to=None, site_name=None, work_content=None, created_by=None, keyword=None):
         result = []
-        files = self._files()
-        for path in files:
-            record = self._read(path)
-            if record is None or record.deleted_at or path.with_suffix(".deleted").exists():
+        files, deleted_markers = self._scan()
+        for path, stat in files:
+            record = self._read(path, stat)
+            if record is None or record.deleted_at or path.with_suffix(".deleted") in deleted_markers:
                 continue
             if created_from and record.created_at < created_from:
                 continue
@@ -103,10 +126,10 @@ class HistoryRepository:
                 continue
             result.append(record)
         with self._lock:
-            live = set(files)
+            live = {path for path, _ in files}
             self._cache = {p: v for p, v in self._cache.items() if p in live}
         if not result and files:
-            self._warn_if_project_mismatch(files)
+            self._warn_if_project_mismatch([path for path, _ in files])
         return sorted(result, key=lambda r: (r.created_at, r.id), reverse=True)
 
     def _warn_if_project_mismatch(self, files):

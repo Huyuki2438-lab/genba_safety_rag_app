@@ -8,8 +8,11 @@ from __future__ import annotations
 import ctypes
 import json
 import logging
+import os
+import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 from backend.app.core.shared_storage import HistoryStorageUnavailable, check_writable, require_root
@@ -18,6 +21,45 @@ logger = logging.getLogger("genba_safety_rag_app.storage_setup")
 
 CONNECTION_OK_MESSAGE = "保存先への接続を確認しました。"
 CONNECTION_NG_MESSAGE = "保存先にアクセスできません。ネットワーク接続またはフォルダのアクセス権を確認してください。"
+
+PROJECT_ID_MAX_LEN = 50
+PROJECT_NAME_MAX_LEN = 200
+
+# この空き容量を下回ったら注意喚起する(写真等の保存が失敗し始める前に気づけるように)。
+LOW_SPACE_WARNING_BYTES = 5 * 1024 ** 3  # 5GB
+
+
+def _free_space_note(path: Path) -> str:
+    """保存先の空き容量を確認し、利用者向けの注記文字列を返す(失敗時は空文字)。"""
+    try:
+        free_bytes = shutil.disk_usage(path).free
+    except OSError:
+        return ""
+    free_gb = free_bytes / (1024 ** 3)
+    if free_bytes < LOW_SPACE_WARNING_BYTES:
+        return (
+            f"\n\n⚠ 保存先の空き容量が少なくなっています（残り約{free_gb:.1f}GB）。"
+            "このままでは写真等が保存できなくなるおそれがあります。空き容量の確保をご検討ください。"
+        )
+    return f"\n（保存先の空き容量：約{free_gb:.1f}GB）"
+
+
+def validate_project_id(raw: str) -> tuple[bool, str]:
+    text = (raw or "").strip()
+    if not text:
+        return False, "現場ID（project_id）を入力してください。"
+    if len(text) > PROJECT_ID_MAX_LEN:
+        return False, f"現場ID（project_id）は{PROJECT_ID_MAX_LEN}文字以内で入力してください。"
+    return True, ""
+
+
+def validate_project_name(raw: str) -> tuple[bool, str]:
+    text = (raw or "").strip()
+    if not text:
+        return False, "現場名（工事名）を入力してください。"
+    if len(text) > PROJECT_NAME_MAX_LEN:
+        return False, f"現場名（工事名）は{PROJECT_NAME_MAX_LEN}文字以内で入力してください。"
+    return True, ""
 
 
 def _is_network_path(path: Path) -> bool:
@@ -55,7 +97,7 @@ def validate_data_root(raw_path: str) -> tuple[bool, str]:
         check_writable(path)
     except HistoryStorageUnavailable as exc:
         return False, f"{CONNECTION_NG_MESSAGE}\n詳細: {exc}"
-    return True, CONNECTION_OK_MESSAGE
+    return True, CONNECTION_OK_MESSAGE + _free_space_note(path)
 
 
 def read_raw_config(config_file: Path) -> dict:
@@ -69,16 +111,25 @@ def read_raw_config(config_file: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def save_data_root(config_file: Path, raw_path: str) -> None:
-    """既存のconfig.jsonのproject_id/project_nameは保持し、data_rootのみ更新する。
+def save_data_root(
+    config_file: Path,
+    raw_path: str,
+    project_id: str | None = None,
+    project_name: str | None = None,
+) -> tuple[str, str]:
+    """data_root(・project_name)を更新する。戻り値は実際に書き込まれた(project_id, project_name)。
 
-    project_id/project_nameが未設定(初回・installerless起動)の場合は
-    利用者に手動編集させないため、既定値を補う。
+    project_idは一度設定されたら変更しない(既存履歴が別IDとして扱われ
+    表示されなくなるのを防ぐため)。未設定の場合のみ引数の値、それも
+    無ければ既定値"001"を補う。project_nameはいつでも変更可能。
     """
     path = normalize_path(raw_path)
     current = read_raw_config(config_file)
-    project_id = str(current.get("project_id") or "001").strip() or "001"
-    project_name = str(current.get("project_name") or "現場").strip() or "現場"
+    existing_project_id = str(current.get("project_id") or "").strip()
+    project_id = existing_project_id or (str(project_id or "").strip()) or "001"
+    project_name = (str(project_name or "").strip()
+                     or str(current.get("project_name") or "").strip()
+                     or "現場")
     storage_type = "network" if _is_network_path(path) else "local"
     payload = {
         "project_id": project_id,
@@ -88,11 +139,111 @@ def save_data_root(config_file: Path, raw_path: str) -> None:
     }
     config_file.parent.mkdir(parents=True, exist_ok=True)
     config_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8-sig")
+    return project_id, project_name
 
 
 def current_data_root(config_file: Path) -> str | None:
     data_root = str(read_raw_config(config_file).get("data_root") or "").strip()
     return data_root or None
+
+
+SITE_MARKER_FILENAME = ".ky_site.json"
+
+
+def read_site_marker(root: Path) -> dict[str, str] | None:
+    """保存先(NAS等)に既に記録されている現場情報(現場ID・現場名)を読み取る。
+
+    複数PCが同じ保存先を指定した際、2台目以降が現場ID・現場名を手入力し直して
+    値がずれてしまう(誤入力・表記ゆれ)のを防ぐため、最初にその保存先を設定した
+    PCが書き込む目印ファイルを参照する。見つからない/壊れている場合はNone。
+    """
+    marker = root / SITE_MARKER_FILENAME
+    try:
+        if not marker.is_file():
+            return None
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    project_id = str(data.get("project_id") or "").strip()
+    if not project_id:
+        return None
+    return {"project_id": project_id, "project_name": str(data.get("project_name") or "").strip()}
+
+
+def write_site_marker(root: Path, project_id: str, project_name: str) -> None:
+    """保存先へ現場情報の目印ファイルを書き込む(既存なら上書き)。
+
+    他PCの現場ID/現場名の自動検出のためだけの補助情報であり、失敗しても
+    アプリの動作に支障はないため、書き込めなくてもログのみで握り潰す。
+    """
+    marker = root / SITE_MARKER_FILENAME
+    payload = json.dumps({"project_id": project_id, "project_name": project_name}, ensure_ascii=False, indent=2) + "\n"
+    temp = root / f".{uuid.uuid4().hex}.ky_site.tmp"
+    try:
+        temp.write_text(payload, encoding="utf-8")
+        os.replace(temp, marker)
+    except OSError as exc:
+        logger.warning("現場情報マーカー（%s）の書き込みに失敗しました: %s", marker, exc)
+    finally:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _unc_share_root(path: Path) -> str | None:
+    """UNCパスから接続対象の共有部分（\\\\サーバー名\\共有名）だけを取り出す。
+
+    `net use` はサブフォルダ単位ではなく共有単位で認証するため。
+    """
+    text = str(path)
+    if not (text.startswith("\\\\") or text.startswith("//")):
+        return None
+    parts = [p for p in text.replace("/", "\\").split("\\") if p]
+    if len(parts) < 2:
+        return None
+    return "\\\\" + parts[0] + "\\" + parts[1]
+
+
+def connect_network_credentials(raw_path: str, username: str, password: str) -> tuple[bool, str]:
+    """社内NASが現在のWindowsログオンと異なる資格情報を要求する場合に、
+    `net use` で別の資格情報として接続する。
+
+    パスワードはコマンドライン引数には渡さず標準入力経由で `net use` に渡し、
+    プロセス一覧等に平文表示されないようにする。接続情報はWindowsの資格情報
+    マネージャーに保存させる(/savecred)ため、本アプリ自身はパスワードを一切
+    保存しない。
+    """
+    if sys.platform != "win32":
+        return False, "この機能はWindows専用です。"
+    username = (username or "").strip()
+    if not username:
+        return False, "ユーザー名を入力してください。"
+    if not password:
+        return False, "パスワードを入力してください。"
+    share = _unc_share_root(normalize_path(raw_path))
+    if not share:
+        return False, "NASの共有フォルダのパス（例: \\\\サーバー名\\共有名\\フォルダ）を確認してください。"
+    try:
+        proc = subprocess.Popen(
+            ["net", "use", share, "*", f"/user:{username}", "/persistent:yes", "/savecred"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+        )
+        stdout, stderr = proc.communicate(input=password + "\n", timeout=30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return False, "NASへの接続がタイムアウトしました。ネットワーク接続を確認してください。"
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("net use failed to launch: %s", exc)
+        return False, f"資格情報の設定に失敗しました。詳細: {exc}"
+    if proc.returncode != 0:
+        detail = (stderr or stdout or "").strip()
+        logger.warning("net use exited with code %s: %s", proc.returncode, detail)
+        return False, f"資格情報でのNAS接続に失敗しました。ユーザー名・パスワード・共有名をご確認ください。詳細: {detail}"
+    return True, f"{share} への接続情報を設定しました。このまま「接続を確認」をお試しください。"
 
 
 _FOLDER_DIALOG_TITLE = "データ保存先フォルダを選択してください（ローカルフォルダ・NAS共有フォルダのどちらも可）"

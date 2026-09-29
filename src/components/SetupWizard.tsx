@@ -1,6 +1,24 @@
+import { useEffect, useState } from "react";
+import { fetchSetupStatus, type SetupStatus } from "../lib/storageSetupApi";
 import { StorageSetupPanel } from "./StorageSetupPanel";
 
 export function SetupWizard() {
+  const [status, setStatus] = useState<SetupStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSetupStatus()
+      .then((result) => {
+        if (!cancelled) setStatus(result);
+      })
+      .catch(() => {
+        if (!cancelled) setStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="app-shell setup-wizard">
       <header className="app-header">
@@ -10,7 +28,13 @@ export function SetupWizard() {
         </div>
       </header>
       <main className="app-main">
-        <StorageSetupPanel mode="initial" />
+        <StorageSetupPanel
+          mode="initial"
+          initialDataRoot={status?.dataRoot ?? null}
+          initialProjectId={status?.projectId ?? null}
+          initialProjectName={status?.projectName ?? null}
+          projectIdLocked={status?.projectIdLocked ?? false}
+        />
       </main>
     </div>
   );

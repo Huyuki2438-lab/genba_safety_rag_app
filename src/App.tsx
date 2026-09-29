@@ -83,7 +83,7 @@ function App() {
     setStorageStatus(null);
     void fetchSetupStatus()
       .then(setStorageStatus)
-      .catch(() => setStorageStatus({ configured: false, dataRoot: null, storageType: null, reachable: false, reachableMessage: null }));
+      .catch(() => setStorageStatus({ configured: false, dataRoot: null, storageType: null, reachable: false, reachableMessage: null, projectId: null, projectName: null, projectIdLocked: false }));
   };
   useEffect(refreshStorageStatus, []);
   const storageReady = storageStatus?.configured && storageStatus.reachable;

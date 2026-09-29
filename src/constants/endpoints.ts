@@ -11,3 +11,4 @@ export const SETUP_BROWSE_ENDPOINT = "/api/v1/setup/browse" as const;
 export const SETUP_VALIDATE_ENDPOINT = "/api/v1/setup/validate" as const;
 export const SETUP_SAVE_ENDPOINT = "/api/v1/setup/save" as const;
 export const SETUP_RESTART_ENDPOINT = "/api/v1/setup/restart" as const;
+export const SETUP_CONNECT_CREDENTIALS_ENDPOINT = "/api/v1/setup/connect-credentials" as const;

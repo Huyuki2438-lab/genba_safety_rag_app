@@ -104,15 +104,19 @@ def main():
         ok_msg = json.loads(ok_body)["message"]
         check(
             "validating an existing writable local folder succeeds with required message",
-            ok_code == 200 and ok_msg == "保存先への接続を確認しました。",
+            ok_code == 200 and ok_msg.startswith("保存先への接続を確認しました。"),
         )
 
-        save_code, save_body = call(port, "/api/v1/setup/save", {"path": str(data_dir)})
+        save_code, save_body = call(
+            port, "/api/v1/setup/save",
+            {"path": str(data_dir), "project_id": "001", "project_name": "初期設定テスト現場"},
+        )
         check("saving the chosen data root succeeds", save_code == 200 and json.loads(save_body)["ok"] is True)
         saved_config = json.loads((pc / "config.json").read_text(encoding="utf-8-sig"))
         check(
             "config.json now contains the chosen data_root without any manual JSON editing",
-            saved_config["data_root"] == str(data_dir) and saved_config["storage_type"] == "local",
+            saved_config["data_root"] == str(data_dir) and saved_config["storage_type"] == "local"
+            and saved_config["project_id"] == "001" and saved_config["project_name"] == "初期設定テスト現場",
         )
 
         restart_ts = time.time()

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 from pathlib import Path
 from urllib.parse import urlsplit
 from fastapi import FastAPI, Request, HTTPException
@@ -7,9 +8,26 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from backend.app.core.config import settings
 from backend.app.api.router import api_router
-from backend.app.core.shared_storage import require_root, HistoryStorageUnavailable
+from backend.app.core.shared_storage import check_writable, require_root, HistoryStorageUnavailable
+
+logger = logging.getLogger("genba_safety_rag_app.startup")
+
+def _check_storage_at_startup():
+    """起動時に保存先の存在・読み書きを確認し、失敗時は理由をログへ残す。
+
+    NASが一時的に切断中でもアプリ自体は起動できるようにするため、
+    ここでは例外を送出せずログのみに記録する（画面へは各APIの503応答で通知）。
+    """
+    try:
+        require_root(settings.DATA_DIR)
+        check_writable(settings.DATA_DIR)
+    except HistoryStorageUnavailable as exc:
+        logger.error("起動時の保存先チェックに失敗しました: %s", exc)
+    except OSError as exc:
+        logger.error("起動時の保存先チェックに失敗しました: %s", exc)
 
 def create_app():
+    _check_storage_at_startup()
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     @app.middleware("http")
     async def local_requests(request: Request, call_next):

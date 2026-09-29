@@ -1,11 +1,11 @@
 > この文書の旧配布方式は廃止しました。現行版は `dist/03_管理者向け資料` と `NAS_DISTRIBUTION_REPORT.md` を参照してください。NAS上のSQLiteの共通更新は使用しません。
 
-# KY写真解析.exe のビルド
+# KY安全管理.exe のビルド
 
 ## 前提
 
 - Windows 10/11、Edge WebView2 Runtime
-- PostgreSQLとNASの設定値を入れた `.env`
+- Vertex AIの設定値（`VERTEX_API_KEY`・`GEMINI_MODEL`・`GOOGLE_CLOUD_PROJECT`・`GOOGLE_CLOUD_LOCATION`）を入れた `.env`
 - Node.js と Python仮想環境
 
 ```powershell
@@ -14,9 +14,9 @@ npm install
 .\build_exe.ps1
 ```
 
-出力は `dist\KY写真解析\KY写真解析.exe` と依存ファイル一式です。`build_exe.ps1` はReactのビルド、PDF生成用Chromiumの取得、PyInstallerのonedirビルドを順に行います。
+`build_exe.ps1` はReactのビルド、PyInstallerのonedirビルド（`build\portable\KY安全管理.exe`）、`scripts\package_distribution.py` による配布物の組み立て（`dist\` 配下）を順に行います。
 
-`KY写真解析.exe` だけを取り出さず、`dist\KY写真解析` フォルダ全体をローカルPCへ配布してください。`pw-browsers` がPDF生成用、`_internal` がPython/DLL依存ファイルです。
+出力される `dist\02_各PCへ配置\KY安全管理` フォルダ一式（EXE・`config.json`・`secrets.env`）をローカルPCへ配布してください。`_internal` がPython/DLL依存ファイルです。
 
 ## 配布前の素材確認
 

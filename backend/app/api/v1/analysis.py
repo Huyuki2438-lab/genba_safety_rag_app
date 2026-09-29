@@ -3,7 +3,8 @@ import logging
 from typing import Literal
 from fastapi import APIRouter, HTTPException
 from backend.app.schemas.analysis import AnalyzeSafetyRequest, AnalyzeSafetyResponse, AnalyzeSafetyErrorResponse
-from backend.app.services.analysis_service import analysis_service
+from backend.app.services.analysis_service import analysis_service, AIConfigurationError
+from backend.app.core.ai.base import UpstreamExecutionError
 from backend.app.core.secrets import redact
 
 logger = logging.getLogger("genba_safety_rag_app.api")
@@ -12,24 +13,17 @@ router = APIRouter(prefix="/api/v1", tags=["analysis"])
 def _build_error_detail(
   *,
   error_type: Literal[
-    "invalid_target",
     "configuration_error",
     "upstream_error",
     "internal_error",
   ],
-  error_category: Literal["target不正", "設定不足", "API呼び出し失敗", "内部エラー"],
+  error_category: Literal["設定不足", "API呼び出し失敗", "内部エラー"],
   error_message: str,
-  metadata: dict[str, str | None] | None = None,
 ) -> dict:
-  safe_metadata = metadata or {}
   payload = AnalyzeSafetyErrorResponse(
     error_type=error_type,
     error_category=error_category,
     error_message=error_message,
-    used_target=safe_metadata.get("used_target"),
-    used_label=safe_metadata.get("used_label"),
-    used_kind=safe_metadata.get("used_kind"),  # type: ignore[arg-type]
-    used_model=safe_metadata.get("used_model"),
   )
   return redact(payload.model_dump())
 
@@ -37,14 +31,24 @@ def _build_error_detail(
 def analyze_safety(req: AnalyzeSafetyRequest) -> AnalyzeSafetyResponse:
     try:
         return analysis_service.run_analysis(req)
-    except ValueError as exc:
+    except AIConfigurationError as exc:
+        logger.error("AI configuration is incomplete")
         raise HTTPException(
-            status_code=400,
+            status_code=503,
             detail=_build_error_detail(
-                error_type="invalid_target",
-                error_category="target不正",
-                error_message="分析設定を確認してください。",
-                metadata={"used_target": req.target},
+                error_type="configuration_error",
+                error_category="設定不足",
+                error_message="AI解析の設定が不足しています。管理者へ連絡してください。",
+            ),
+        ) from exc
+    except UpstreamExecutionError as exc:
+        logger.error("Analysis upstream call failed (%s)", type(exc).__name__)
+        raise HTTPException(
+            status_code=502,
+            detail=_build_error_detail(
+                error_type="upstream_error",
+                error_category="API呼び出し失敗",
+                error_message="AI解析に失敗しました。しばらくしてから再度実行してください。",
             ),
         ) from exc
     except Exception as exc:
@@ -54,7 +58,6 @@ def analyze_safety(req: AnalyzeSafetyRequest) -> AnalyzeSafetyResponse:
             detail=_build_error_detail(
                 error_type="internal_error",
                 error_category="内部エラー",
-                error_message="AI分析に失敗しました。インターネット接続とAPI設定を確認して再試行してください。",
-                metadata={"used_target": req.target},
+                error_message="AI解析に失敗しました。しばらくしてから再度実行してください。",
             ),
         ) from exc

@@ -23,7 +23,7 @@ SHARED = BASE / "共有 日本語 空白" / "data"
 for part in ("records", "images", "reports", "export"):
     (SHARED / part).mkdir(parents=True)
 SOURCE = ROOT / "dist" / "02_各PCへ配置" / "KY安全管理"
-KEY = dotenv_values(SOURCE / "secrets.env")["GEMINI_API_KEY"]
+KEY = dotenv_values(SOURCE / "secrets.env")["VERTEX_API_KEY"]
 RESULTS = []
 PROCESSES = []
 
@@ -99,12 +99,12 @@ if __name__ == "__main__":
         first, a, folder, env = launch(1); ports.append(a)
         second, b, _, _ = launch(2); ports.append(b)
         check("two isolated EXEs start without Python/Node on PATH",call(a,"/")[0]==200 and call(b,"/")[0]==200)
-        check("secrets.env enables primary AI target",json.loads(call(a,"/api/v1/settings")[1])["targets"][0]["enabled"])
+        check("secrets.env enables AI analysis",json.loads(call(a,"/api/v1/settings")[1])["ai_enabled"])
         duplicate=subprocess.Popen([str(folder / "KY安全管理.exe")],cwd=folder,env=env,creationflags=subprocess.CREATE_NO_WINDOW)
         check("duplicate launch exits",duplicate.wait(timeout=45)==0 and first.poll() is None)
         fixture=png(); (BASE/"fixture.png").write_bytes(fixture)
         payload={"imageName":"試験 写真.png","imageMimeType":"image/png","imageBase64":base64.b64encode(fixture).decode(),
-                 "mode":"gemini_a","providerDisplayLabel":"KY","model":"test","markdown":"## 危険予知\n\n| 危険 | 重大度 | 対策 |\n| --- | --- | --- |\n| 重機接触 | 高 | 立入禁止・誘導員配置 |",
+                 "mode":"vertex","providerDisplayLabel":"KY","model":"test","markdown":"## 危険予知\n\n| 危険 | 重大度 | 対策 |\n| --- | --- | --- |\n| 重機接触 | 高 | 立入禁止・誘導員配置 |",
                  "siteName":"テスト現場","workContent":"掘削","mainRisk":"重機接触"}
         with concurrent.futures.ThreadPoolExecutor(2) as pool:
             saved=list(pool.map(lambda port: call(port,"/api/v1/history",payload), [a,b]))
@@ -136,10 +136,10 @@ if __name__ == "__main__":
         check("missing PDF is a readable error",call(b,report_list[0]['url'])[0]==404)
         actual_pdf.write_bytes(pdf[1])
         if '--live-ai' in sys.argv:
-            ai={"target":"gemini_a","image_base64":payload['imageBase64'],"image_mime_type":"image/png"}
+            ai={"image_base64":payload['imageBase64'],"image_mime_type":"image/png"}
             with concurrent.futures.ThreadPoolExecutor(2) as pool:
                 analyzed=list(pool.map(lambda port:call(port,'/api/v1/analyze',ai),[a,b]))
-            check("two simultaneous real Gemini API calls",all(r[0]==200 and json.loads(r[1]).get('markdown') for r in analyzed))
+            check("two simultaneous real Vertex AI calls",all(r[0]==200 and json.loads(r[1]).get('markdown') for r in analyzed))
         # Headless Edge fallback because the in-app Browser is unavailable.
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:

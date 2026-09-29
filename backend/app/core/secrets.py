@@ -3,7 +3,7 @@ import os
 
 def redact(value):
     if isinstance(value, str):
-        for name in ("GEMINI_API_KEY", "GEMINI_A_API_KEY", "GEMINI_B_API_KEY", "VERTEX_API_KEY"):
+        for name in ("VERTEX_API_KEY",):
             key = os.getenv(name, "")
             if len(key) >= 8:
                 value = value.replace(key, "[非表示]")

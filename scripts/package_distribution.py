@@ -10,6 +10,8 @@ DIST = ROOT / "dist"
 NAS = DIST / "01_NASへ配置" / "KY安全管理"
 PC = DIST / "02_各PCへ配置" / "KY安全管理"
 DOCS = DIST / "03_管理者向け資料"
+PROMPTS_SRC = ROOT / "backend" / "app" / "core" / "prompts" / "templates"
+PROMPTS_DIST = DOCS / "AIプロンプト"
 NAS_UNC_ROOT = r"\\landisk-87a5d6\disk1\KY検出システムデータ\KY安全管理"
 
 def write(path, text):
@@ -17,24 +19,32 @@ def write(path, text):
     path.write_text(text.strip() + "\n", encoding="utf-8-sig")
 
 def main():
-    env = {**dotenv_values(ROOT / ".env"), **{k: v for k, v in os.environ.items() if k.startswith("GEMINI_")}}
-    key = env.get("GEMINI_A_API_KEY") or env.get("GEMINI_API_KEY")
+    env = {**dotenv_values(ROOT / ".env"), **{k: v for k, v in os.environ.items() if k.startswith(("VERTEX_", "GEMINI_", "GOOGLE_CLOUD_"))}}
+    key = env.get("VERTEX_API_KEY")
     if not key or key.startswith("<"):
-        raise SystemExit("Existing real Gemini key was not found; package not created")
+        raise SystemExit("Existing real Vertex AI API key was not found; package not created")
+    if not env.get("GOOGLE_CLOUD_PROJECT"):
+        raise SystemExit("GOOGLE_CLOUD_PROJECT was not found; package not created")
     binary = ROOT / "build" / "portable" / "KY安全管理.exe"
     if not binary.is_file():
         raise SystemExit("Build EXE first")
+    if not PROMPTS_SRC.is_dir():
+        raise SystemExit("Gemini prompt templates not found")
     for project in ("001_芝原改良工事", "template_project"):
         for folder in ("records", "images", "reports", "export"):
             (NAS / project / "data" / folder).mkdir(parents=True, exist_ok=True)
     PC.mkdir(parents=True, exist_ok=True)
     shutil.copy2(binary, PC / binary.name)
+    # Reference copy of the prompts sent to Vertex AI, for admin review (EXE already embeds these).
+    if PROMPTS_DIST.exists():
+        shutil.rmtree(PROMPTS_DIST)
+    shutil.copytree(PROMPTS_SRC, PROMPTS_DIST)
     # Preserve per-site configuration on subsequent builds.
     if not (PC / "config.json").exists():
         write(PC / "config.json", json.dumps({"project_id": "001", "project_name": "芝原改良工事",
             "data_root": NAS_UNC_ROOT + r"\001_芝原改良工事\data"}, ensure_ascii=False, indent=2))
-    secret = "GEMINI_API_KEY=" + key + "\n"
-    for name in ("GEMINI_A_MODEL", "GEMINI_B_API_KEY", "GEMINI_B_MODEL", "VERTEX_API_KEY", "VERTEX_MODEL", "VERTEX_PROJECT_ID", "VERTEX_LOCATION"):
+    secret = "VERTEX_API_KEY=" + key + "\n"
+    for name in ("GEMINI_MODEL", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
         if env.get(name):
             secret += name + "=" + env[name] + "\n"
     # dotenv expects UTF-8 without BOM.
@@ -113,6 +123,14 @@ secrets.envはNASへ置かず、会社指定の管理者用保管場所で別管
 .uploadingは未完了ファイルです。全PC終了とバックアップ後に管理者が確認して整理できます。
 通信断後の孤立写真・PDFは自動削除しません。保存済み履歴を壊さないことを優先します。
 """)
+    write(DOCS / "AIプロンプト" / "README.txt", """
+【AIプロンプトについて】
+このフォルダはKY安全管理.exeがVertex AI（Gemini Flash）へ送信するプロンプトの参考コピーです。
+kiken_yochi_system.jinja2：分析ルール・出力形式を定めるシステムプロンプト。
+kiken_yochi_user.jinja2：画像分析時に付加するユーザープロンプト。
+実際にアプリが使用するのはEXE内に組み込まれた版です。このフォルダを編集してもアプリの動作は変わりません。
+プロンプトの変更が必要な場合は開発担当者へ連絡し、再ビルドを依頼してください。
+""")
     write(DOCS / "トラブル対応.txt", """
 【共有フォルダに接続できない】
 エクスプローラーでconfig.jsonのdata_rootを開き、LAN・VPN・NAS電源・共有名・権限を確認します。
@@ -138,7 +156,8 @@ EXE・config.json・secrets.envをローカルPCの同じフォルダへ置き�
 インターネット・会社のプロキシ・APIの利用上限を管理者が確認します。
 secrets.envを画面共有・メール・公開リポジトリへ掲載しないでください。
 """)
-    print("Distribution assembled; real API key configured (value hidden)")
+    print("Distribution assembled; real Vertex AI API key configured (value hidden)")
+    print("AI prompt files copied:", len(list(PROMPTS_DIST.glob('*.jinja2'))))
     print("PC package files:", len(list(PC.iterdir())))
     print("PC package MiB:", round(sum(p.stat().st_size for p in PC.rglob('*') if p.is_file()) / 1024**2, 2))
 

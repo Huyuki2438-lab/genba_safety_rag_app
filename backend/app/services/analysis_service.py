@@ -14,6 +14,10 @@ from backend.app.core.config import settings
 from backend.app.core.secrets import redact
 
 
+class AIConfigurationError(RuntimeError):
+    """Raised when required Vertex AI settings are missing."""
+
+
 class AnalysisService:
     def __init__(self):
         self.ai_factory = AIFactory()
@@ -21,18 +25,15 @@ class AnalysisService:
         self.parser = AnalysisParser()
 
     def run_analysis(self, req: AnalyzeSafetyRequest) -> AnalyzeSafetyResponse:
-        # 1. Target identification
-        target_id = req.target or settings.DEFAULT_AI_TARGET
-        target_config = settings.TARGETS.get(target_id)
-        if not target_config:
-            raise ValueError(f"Invalid target: {target_id}")
+        if not (settings.VERTEX_API_KEY and settings.GEMINI_MODEL and settings.GOOGLE_CLOUD_PROJECT):
+            raise AIConfigurationError("AI分析の設定が不足しています。管理者へ連絡してください。")
 
-        # 2. Prompt generation (backend-driven; frontend values are ignored)
+        # 1. Prompt generation (backend-driven; frontend values are ignored)
         system_instruction = self.prompt_manager.render("kiken_yochi_system.jinja2")
         user_prompt = self.prompt_manager.render("kiken_yochi_user.jinja2")
 
-        # 3. Get AI provider and run inference (req is NOT mutated)
-        provider = self.ai_factory.get_provider(target_id)
+        # 2. Get AI provider and run inference (req is NOT mutated)
+        provider = self.ai_factory.get_provider()
         markdown = provider.predict(
             image_base64=req.image_base64,
             image_mime_type=req.image_mime_type,
@@ -42,10 +43,10 @@ class AnalysisService:
 
         markdown = redact(markdown)
 
-        # 4. Parse response (extract structured data)
+        # 3. Parse response (extract structured data)
         factors = self.parser.parse_markdown_table(markdown)
 
-        # 5. Build intermediate result
+        # 4. Build intermediate result
         result_id = str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
 
@@ -54,18 +55,13 @@ class AnalysisService:
             timestamp=timestamp,
             markdown=markdown,
             factors=factors,
-            used_target=target_id,
-            used_model=target_config.get_model(),
-            used_kind=target_config.kind,
+            used_model=settings.GEMINI_MODEL,
             is_inference=True,
         )
 
         return AnalyzeSafetyResponse(
             markdown=markdown,
-            used_target=target_id,
-            used_label=target_config.label,
-            used_kind=target_config.kind,
-            used_model=target_config.get_model(),
+            used_model=settings.GEMINI_MODEL,
             result=analysis_result,
         )
 

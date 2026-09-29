@@ -20,7 +20,7 @@ from backend.app.schemas.history import CreateAnalysisHistoryRequest
 
 def record():
     return AnalysisHistoryRecord(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
-        image_name="写真.png", photo_relative_path="2026/09/photo.png", mode="gemini_a", provider_display_label="KY",
+        image_name="写真.png", photo_relative_path="2026/09/photo.png", mode="vertex", provider_display_label="KY",
         model="test", markdown="危険：重機接触\n対策：立入禁止", site_name="試験現場")
 
 
@@ -93,7 +93,7 @@ class SharedStorageTests(unittest.TestCase):
         self.assertEqual(self.repo.list(), [])
     def test_acknowledgement_loss_keeps_photo(self):
         request = CreateAnalysisHistoryRequest(imageName="a.png", imageBase64=base64.b64encode(b"photo").decode(),
-            mode="gemini_a", providerDisplayLabel="KY", model="test", markdown="result")
+            mode="vertex", providerDisplayLabel="KY", model="test", markdown="result")
         with patch.object(settings, "DATA_DIR", self.root), patch.object(settings, "PHOTO_STORAGE_DIR", self.root / "images"):
             with patch.object(self.repo, "add", side_effect=HistoryStorageUnavailable("lost acknowledgement")):
                 with self.assertRaises(HistoryStorageUnavailable): HistoryService(self.repo).create(request, fallback_created_by="test")
@@ -101,7 +101,7 @@ class SharedStorageTests(unittest.TestCase):
         self.assertEqual(len(list((self.root / "images").rglob("*.png"))), 1)
     def test_known_secret_redacted_from_records(self):
         secret = "test-secret-never-persist-123456789"
-        with patch.dict(os.environ, {"GEMINI_API_KEY": secret}):
+        with patch.dict(os.environ, {"VERTEX_API_KEY": secret}):
             item = record(); item.markdown = "結果 " + secret
             self.repo.add(item)
             self.assertNotIn(secret, next(self.root.rglob("*.json")).read_text(encoding="utf-8"))

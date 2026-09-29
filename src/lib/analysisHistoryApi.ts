@@ -1,9 +1,8 @@
 import { HISTORY_ENDPOINT } from "../constants/endpoints";
-import type { AiMode } from "../types/ai";
 import type { AnalysisHistoryEntry } from "../types/analysis";
 
 export type HistoryFilters = { dateFrom?: string; dateTo?: string; siteName?: string; workContent?: string; createdBy?: string; keyword?: string };
-export type CreateHistoryInput = { imageName: string; imageMimeType: string; imageBase64: string; mode: AiMode; providerDisplayLabel: string; model: string; markdown: string; siteName: string; workContent: string; mainRisk: string };
+export type CreateHistoryInput = { imageName: string; imageMimeType: string; imageBase64: string; mode: string; providerDisplayLabel: string; model: string; markdown: string; siteName: string; workContent: string; mainRisk: string };
 
 const readError = async (response: Response): Promise<string> => {
   try { const data: unknown = await response.json(); if (data && typeof data === "object" && "detail" in data && typeof data.detail === "string") return data.detail; } catch { /* not JSON */ }

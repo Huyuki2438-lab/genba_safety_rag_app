@@ -1,6 +1,5 @@
 import { ANALYZE_ENDPOINT } from "../constants/endpoints";
 import { getErrorMessage } from "./providers/providerUtils";
-import { getSafetyAnalysisRuntimeConfig } from "./providers/providerRuntime";
 import { fileToBase64, getImageMimeType } from "../utils/imageFile";
 import type {
   AnalyzeImageSafetyInput,
@@ -36,13 +35,18 @@ const extractAnalyzeApiError = async (
   }
 };
 
-const normalizeMarkdownFromAnalyzeResponse = (data: unknown): string | null => {
+const normalizeResultFromAnalyzeResponse = (
+  data: unknown
+): AnalyzeImageSafetyResult | null => {
   if (!data || typeof data !== "object") return null;
 
   const directMarkdown =
     "markdown" in data ? (data as { markdown?: unknown }).markdown : undefined;
-  if (typeof directMarkdown === "string") {
-    return directMarkdown.trim();
+  const directModel =
+    "used_model" in data ? (data as { used_model?: unknown }).used_model : undefined;
+
+  if (typeof directMarkdown === "string" && typeof directModel === "string") {
+    return { markdown: directMarkdown.trim(), usedModel: directModel };
   }
 
   const nestedResult =
@@ -53,20 +57,21 @@ const normalizeMarkdownFromAnalyzeResponse = (data: unknown): string | null => {
     "markdown" in nestedResult
       ? (nestedResult as { markdown?: unknown }).markdown
       : undefined;
-  if (typeof nestedMarkdown !== "string") return null;
+  const nestedModel =
+    "used_model" in nestedResult
+      ? (nestedResult as { used_model?: unknown }).used_model
+      : undefined;
+  if (typeof nestedMarkdown !== "string" || typeof nestedModel !== "string") return null;
 
-  return nestedMarkdown.trim();
+  return { markdown: nestedMarkdown.trim(), usedModel: nestedModel };
 };
 
 const callSafetyAnalyzeApi = async ({
-  imageFile,
-  mode
+  imageFile
 }: {
   imageFile: File;
-  mode: AnalyzeImageSafetyInput["mode"];
-}): Promise<string> => {
+}): Promise<AnalyzeImageSafetyResult> => {
   const requestBody = JSON.stringify({
-    target: mode,
     image_base64: await fileToBase64(imageFile),
     image_mime_type: getImageMimeType(imageFile)
   });
@@ -89,22 +94,19 @@ const callSafetyAnalyzeApi = async ({
     if (detail?.error_type === "upstream_error") {
       throw new SafetyAnalysisErrorClass("PROVIDER_REQUEST_FAILED", message);
     }
-    if (detail?.error_type === "invalid_target") {
-      throw new SafetyAnalysisErrorClass("CONFIG_MISSING", message);
-    }
 
     throw new SafetyAnalysisErrorClass("UNKNOWN", message);
   }
 
   const data: unknown = await response.json();
-  const normalized = normalizeMarkdownFromAnalyzeResponse(data);
+  const normalized = normalizeResultFromAnalyzeResponse(data);
   if (normalized === null) {
     throw new SafetyAnalysisErrorClass(
       "API_RESPONSE_INVALID",
       "analyze response markdown is missing."
     );
   }
-  if (normalized.length === 0) {
+  if (normalized.markdown.length === 0) {
     throw new SafetyAnalysisErrorClass(
       "EMPTY_RESPONSE",
       "analyze response markdown is empty."
@@ -128,8 +130,7 @@ const isLikelyNetworkError = (error: unknown): boolean => {
 };
 
 export const analyzeSafetyImage = async ({
-  imageFile,
-  mode
+  imageFile
 }: AnalyzeImageSafetyInput): Promise<AnalyzeImageSafetyResult> => {
   if (!imageFile) {
     throw new SafetyAnalysisErrorClass(
@@ -138,11 +139,8 @@ export const analyzeSafetyImage = async ({
     );
   }
 
-  const { providerType } = getSafetyAnalysisRuntimeConfig(mode);
-
   try {
-    const markdown = await callSafetyAnalyzeApi({ imageFile, mode });
-    return { markdown };
+    return await callSafetyAnalyzeApi({ imageFile });
   } catch (error) {
     if (error instanceof SafetyAnalysisErrorClass) {
       throw error;
@@ -153,14 +151,14 @@ export const analyzeSafetyImage = async ({
     if (isLikelyNetworkError(error)) {
       throw new SafetyAnalysisErrorClass(
         "NETWORK_ERROR",
-        `${providerType} 呼び出し中にネットワークエラーが発生しました: ${detailedMessage}`,
+        `AI解析呼び出し中にネットワークエラーが発生しました: ${detailedMessage}`,
         error
       );
     }
 
     throw new SafetyAnalysisErrorClass(
       "UNKNOWN",
-      `${providerType} 呼び出し中に予期しないエラーが発生しました: ${detailedMessage}`,
+      `AI解析呼び出し中に予期しないエラーが発生しました: ${detailedMessage}`,
       error
     );
   }

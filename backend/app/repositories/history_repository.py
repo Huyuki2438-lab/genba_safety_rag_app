@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import logging
 import os
 import threading
 from datetime import datetime
@@ -8,7 +9,9 @@ from uuid import UUID
 from pydantic import BaseModel, ValidationError
 from backend.app.core.config import settings
 from backend.app.core.secrets import redact
-from backend.app.core.shared_storage import HistoryStorageUnavailable, publish, require_root
+from backend.app.core.shared_storage import HistoryStorageUnavailable, _describe, _guidance, check_writable, publish, require_root
+
+logger = logging.getLogger("genba_safety_rag_app.history")
 
 class AnalysisHistoryRecord(BaseModel):
     id: str
@@ -36,8 +39,14 @@ class HistoryRepository:
 
     def initialize_schema(self):
         require_root(self.root)
-        for folder in ("records", "images", "reports", "export"):
-            (self.root / folder).mkdir(exist_ok=True)
+        try:
+            for folder in ("records", "images", "reports", "export"):
+                (self.root / folder).mkdir(exist_ok=True)
+        except OSError as exc:
+            raise HistoryStorageUnavailable(
+                f"{_describe(self.root)}にフォルダを作成できません（{self.root}）。{_guidance(self.root)} 詳細: {exc}"
+            ) from None
+        check_writable(self.root / "records")
 
     def _files(self):
         require_root(self.root / "records")
@@ -66,7 +75,7 @@ class HistoryRepository:
             if not record.created_at.tzinfo or not record.updated_at.tzinfo:
                 raise ValueError()
             relative = Path(record.photo_relative_path)
-            if relative.is_absolute() or ".." in relative.parts or ":" in str(relative) or record.mode not in settings.TARGETS:
+            if relative.is_absolute() or ".." in relative.parts or ":" in str(relative) or not record.mode:
                 raise ValueError()
         except (ValueError, KeyError, TypeError, AttributeError, ValidationError):
             record = None
@@ -96,7 +105,27 @@ class HistoryRepository:
         with self._lock:
             live = set(files)
             self._cache = {p: v for p, v in self._cache.items() if p in live}
+        if not result and files:
+            self._warn_if_project_mismatch(files)
         return sorted(result, key=lambda r: (r.created_at, r.id), reverse=True)
+
+    def _warn_if_project_mismatch(self, files):
+        """履歴が0件のとき、project_idの不一致が原因かをログへ残す。"""
+        foreign_ids = set()
+        for path in files[:50]:
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            project_id = raw.get("project_id")
+            if project_id and project_id != self.project_id:
+                foreign_ids.add(project_id)
+        if foreign_ids:
+            logger.warning(
+                "履歴が0件です。data_root(%s)内に別のproject_id(%s)の履歴ファイルがあります。"
+                "現在のconfig.jsonのproject_id=%sが正しいか、data_rootが想定の現場フォルダを指しているか確認してください。",
+                self.root, ", ".join(sorted(foreign_ids)), self.project_id,
+            )
 
     def _path(self, entry_id):
         try:

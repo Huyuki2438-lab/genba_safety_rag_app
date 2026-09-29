@@ -17,8 +17,11 @@ class VertexProvider(AIBase):
         encoded_project = parse.quote(self.project_id, safe="")
         encoded_location = parse.quote(self.location, safe="")
 
+        # The "global" location uses a host without a region prefix; every
+        # other location is served from its own regional host.
+        host = "aiplatform.googleapis.com" if self.location == "global" else f"{encoded_location}-aiplatform.googleapis.com"
         url = (
-            f"https://{encoded_location}-aiplatform.googleapis.com/v1/projects/"
+            f"https://{host}/v1/projects/"
             f"{encoded_project}/locations/{encoded_location}/publishers/google/models/"
             f"{encoded_model}:generateContent"
         )

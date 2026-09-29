@@ -196,8 +196,11 @@ def main() -> int:
             server_thread.join(timeout=0.5)
         return 0
     except Exception as exc:
-        logger.error("Startup or runtime failed (%s)", type(exc).__name__)
-        _fatal_message_box(APP_NAME, "起動できませんでした。config.json、secrets.envがEXEと同じフォルダにあることと、設定内容を確認してください。")
+        logger.error("Startup or runtime failed (%s): %s", type(exc).__name__, exc)
+        detail = str(exc).strip()
+        message = f"起動できませんでした。\n\n{detail}" if detail else "起動できませんでした。"
+        message += "\n\nconfig.json、secrets.envがEXEと同じフォルダにあることを確認してください。"
+        _fatal_message_box(APP_NAME, message)
         return 1
     finally:
         if server:

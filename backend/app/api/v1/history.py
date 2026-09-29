@@ -70,8 +70,13 @@ def list_reports(entry_id: str):
     try:
         require_root(settings.DATA_DIR / "reports")
         folder = settings.DATA_DIR / "reports" / str(UUID(entry_id))
-        return {"reports": [{"name": p.name, "url": f"/reports/{entry_id}/{p.name}"}
-                            for p in sorted(folder.glob("*")) if p.suffix.lower() in {".pdf", ".xlsx"}]}
+        reports = sorted(
+            (p for p in folder.glob("*") if p.suffix.lower() in {".pdf", ".xlsx"}),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        # The detail view is a quick link to the most recently generated output.
+        return {"reports": [{"name": p.name, "url": f"/reports/{entry_id}/{p.name}"} for p in reports[:1]]}
     except (OSError, HistoryStorageUnavailable):
         raise HTTPException(status_code=503, detail=NETWORK_MESSAGE) from None
     except ValueError:

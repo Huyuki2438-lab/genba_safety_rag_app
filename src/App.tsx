@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { AiSettingsStatusBar } from "./components/AiSettingsStatusBar";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { DevicePreviewFrame } from "./components/DevicePreviewFrame";
 import { Header } from "./components/Header";
@@ -8,28 +7,15 @@ import { ResultTabs } from "./components/ResultTabs";
 import { HistoryView } from "./components/HistoryView";
 import { EXCEL_ENDPOINT, PDF_ENDPOINT } from "./constants/endpoints";
 import { useGeminiSafetyAnalysis } from "./hooks/useGeminiSafetyAnalysis";
-import { isAiMode } from "./types/ai";
 import { buildPrintableBodyHtml } from "./utils/buildPrintableBodyHtml";
 import { formatDisplayTimestamp, formatFileTimestamp } from "./utils/formatTimestamp";
 import { fileToBase64, getImageMimeType } from "./utils/imageFile";
 import { renderMarkdownToHtml } from "./utils/renderMarkdownToHtml";
 import { sanitizeHtml } from "./utils/sanitizeHtml";
-import type { AiMode } from "./types/ai";
 import type { AnalysisHistoryEntry } from "./types/analysis";
 import type { ResultTabKey } from "./types/ui";
 
-const AI_MODE_STORAGE_KEY = "genba_safety_rag_app.ai_mode";
-const DEFAULT_AI_MODE: AiMode = "gemini_a";
 const PDF_REPORT_TITLE = "現場安全 危険分析レポート";
-
-const getInitialAiMode = (): AiMode => {
-  if (typeof window === "undefined") {
-    return DEFAULT_AI_MODE;
-  }
-
-  const storedMode = window.localStorage.getItem(AI_MODE_STORAGE_KEY);
-  return isAiMode(storedMode) ? storedMode : DEFAULT_AI_MODE;
-};
 
 const fileToDataUrl = async (file: File): Promise<string> => {
   const base64 = await fileToBase64(file);
@@ -84,7 +70,6 @@ type ReportExportData = {
 function App() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState<ResultTabKey>("overview");
-  const [mode, setMode] = useState<AiMode>(() => getInitialAiMode());
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingExcel, setIsSavingExcel] = useState(false);
   const [page, setPage] = useState<"create" | "history">("create");
@@ -101,9 +86,8 @@ function App() {
     activeHistoryEntry,
     errorMessage,
     analyzeSelectedImage,
-    showHistoryEntry,
-    runtimeConfig
-  } = useGeminiSafetyAnalysis(mode);
+    showHistoryEntry
+  } = useGeminiSafetyAnalysis();
 
   const localImagePreviewUrl = useMemo(() => {
     if (!selectedImage) return null;
@@ -116,10 +100,6 @@ function App() {
       if (localImagePreviewUrl) URL.revokeObjectURL(localImagePreviewUrl);
     };
   }, [localImagePreviewUrl]);
-
-  useEffect(() => {
-    window.localStorage.setItem(AI_MODE_STORAGE_KEY, mode);
-  }, [mode]);
 
   const prepareReportExport = async (historyEntry?: AnalysisHistoryEntry): Promise<ReportExportData | null> => {
     if (typeof window === "undefined") return null;
@@ -251,11 +231,6 @@ function App() {
           <button type="button" className="nav-button is-active">KY作成</button>
           <button type="button" className="nav-button" onClick={() => setPage("history")}>履歴</button>
         </nav>
-        <AiSettingsStatusBar
-          mode={mode}
-          onModeChange={setMode}
-          runtimeConfig={runtimeConfig}
-        />
 
         {pendingSave && !isAnalyzing && <div role="alert"><p>分析結果はまだ保存されていません。NAS復旧後、先に履歴で保存済みか確認してください。</p><button onClick={() => void retrySave()}>分析結果の保存を再試行</button></div>}
         <div className="main-grid">

@@ -1,5 +1,3 @@
-import type { AiMode } from "./ai";
-
 export type AnalysisErrorCode =
   | "API_KEY_MISSING"
   | "CONFIG_MISSING"
@@ -12,11 +10,11 @@ export type AnalysisErrorCode =
 
 export type AnalyzeImageSafetyInput = {
   imageFile: File | null;
-  mode: AiMode;
 };
 
 export type AnalyzeImageSafetyResult = {
   markdown: string;
+  usedModel: string;
 };
 
 export type AnalysisHistoryEntry = {
@@ -30,7 +28,7 @@ export type AnalysisHistoryEntry = {
   imageName: string;
   imageMimeType?: string;
   imageUrl?: string;
-  mode: AiMode;
+  mode: string;
   providerDisplayLabel: string;
   model: string;
   markdown: string;

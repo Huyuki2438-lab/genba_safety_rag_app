@@ -23,7 +23,7 @@ export function SetupWizard() {
     <div className="app-shell setup-wizard">
       <header className="app-header">
         <div className="app-header__inner">
-          <h1 className="app-header__title">現場安全 危険分析 — 初期設定</h1>
+          <h1 className="app-header__title">現場KYアシスト — 初期設定</h1>
           <p className="app-header__subtitle">初めてこのパソコンで起動しました。データ保存先とプロジェクト情報を設定すると利用を開始できます。</p>
         </div>
       </header>

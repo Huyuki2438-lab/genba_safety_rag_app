@@ -23,7 +23,7 @@ CONTROL_PORT = int(os.environ.get("KY_CONTROL_PORT", "51837"))  # 同一PC二重
 APP_PORT = int(os.environ.get("KY_APP_PORT", "51838"))  # 画面(API)用の優先ポート。使用中のときだけ空きポートへ退避する
 STARTUP_TIMEOUT_SEC = 20
 GRACEFUL_SHUTDOWN_TIMEOUT_SEC = 120
-WINDOW_TITLE = "建設現場安全管理AIアシスタント"
+WINDOW_TITLE = "現場KYアシスト"
 
 
 def _app_dir() -> Path:

@@ -2,17 +2,20 @@ import type { ReactNode } from "react";
 
 type DevicePreviewFrameProps = {
   imagePreviewUrl: string | null;
+  toolbar: ReactNode;
   children: ReactNode;
 };
 
 export function DevicePreviewFrame({
   imagePreviewUrl,
+  toolbar,
   children
 }: DevicePreviewFrameProps) {
   return (
     <section className="result-frame">
       <div className="result-frame__header">
-        <h2 className="panel-title">3. 分析結果</h2>
+        <h2 className="panel-title">4. 分析結果</h2>
+        {toolbar}
       </div>
 
       <div className="preview-surface is-pc">

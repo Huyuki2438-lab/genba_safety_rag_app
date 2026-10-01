@@ -21,24 +21,26 @@ export function SettingsView() {
   }, []);
 
   return (
-    <div className="history-page">
-      <div className="history-filters">
-        <h2>設定</h2>
-        <p className="panel-description">現在のデータ保存先・現場名を確認・変更できます。</p>
-        <p>
-          現在のデータ保存先：<strong>{loaded ? status?.dataRoot ?? "未設定" : "読み込み中..."}</strong>
-        </p>
-      </div>
+    <div className="settings-page">
+      <section className="settings-card">
+        <div className="settings-card__summary">
+          <h2>設定</h2>
+          <p className="panel-description">現在の保存先とプロジェクト情報を確認・変更できます。</p>
+          <p className="settings-card__current-path">
+            現在の保存先：<strong>{loaded ? status?.dataRoot ?? "未設定" : "読み込み中..."}</strong>
+          </p>
+        </div>
 
-      {loaded && (
-        <StorageSetupPanel
-          mode="change"
-          initialDataRoot={status?.dataRoot ?? null}
-          initialProjectId={status?.projectId ?? null}
-          initialProjectName={status?.projectName ?? null}
-          initialStorageType={status?.storageType ?? null}
-        />
-      )}
+        {loaded && (
+          <StorageSetupPanel
+            mode="change"
+            initialDataRoot={status?.dataRoot ?? null}
+            initialProjectId={status?.projectId ?? null}
+            initialProjectName={status?.projectName ?? null}
+            initialStorageType={status?.storageType ?? null}
+          />
+        )}
+      </section>
     </div>
   );
 }

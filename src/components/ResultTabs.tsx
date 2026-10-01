@@ -16,10 +16,14 @@ import { HtmlReport } from "./HtmlReport";
 
 type ResultTabsProps = {
   activeTab: ResultTabKey;
-  onTabChange: (tab: ResultTabKey) => void;
   isAnalyzing: boolean;
   analysisMarkdown: string;
   errorMessage: string | null;
+};
+
+type ResultToolbarProps = {
+  activeTab: ResultTabKey;
+  onTabChange: (tab: ResultTabKey) => void;
   canSaveAsPdf: boolean;
   isSavingPdf: boolean;
   onSaveAsPdf: () => void;
@@ -52,18 +56,86 @@ const sectionConfigByTab: Record<
   additional: [{ key: "ADDITIONAL", title: "補足事項" }]
 };
 
-export function ResultTabs({
+export function ResultToolbar({
   activeTab,
   onTabChange,
-  isAnalyzing,
-  analysisMarkdown,
-  errorMessage,
   canSaveAsPdf,
   isSavingPdf,
   onSaveAsPdf,
   canSaveAsExcel,
   isSavingExcel,
   onSaveAsExcel
+}: ResultToolbarProps) {
+  return (
+    <div className="result-toolbar">
+      <div className="result-tablist" role="tablist" aria-label="分析結果タブ">
+        {tabItems.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onTabChange(tab.key)}
+              className={["result-tab", isActive ? "is-active" : ""].join(" ")}
+            >
+              <Icon className="size-4" aria-hidden="true" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="result-actions">
+        <button
+          type="button"
+          className="result-save-button"
+          onClick={onSaveAsPdf}
+          disabled={!canSaveAsPdf || isSavingPdf}
+        >
+          {isSavingPdf ? (
+            <>
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              PDF出力準備中...
+            </>
+          ) : (
+            <>
+              <Download className="size-4" aria-hidden="true" />
+              PDF
+            </>
+          )}
+        </button>
+        <button
+          type="button"
+          className="result-save-button"
+          onClick={onSaveAsExcel}
+          disabled={!canSaveAsExcel || isSavingExcel}
+        >
+          {isSavingExcel ? (
+            <>
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Excel出力準備中...
+            </>
+          ) : (
+            <>
+              <Download className="size-4" aria-hidden="true" />
+              Excel
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function ResultTabs({
+  activeTab,
+  isAnalyzing,
+  analysisMarkdown,
+  errorMessage,
 }: ResultTabsProps) {
   const parsed = useMemo(() => parseAnalysisSections(analysisMarkdown), [analysisMarkdown]);
   const fullReportHtml = useMemo(
@@ -85,68 +157,6 @@ export function ResultTabs({
 
   return (
     <section className="result-tabs">
-      <div className="result-tabs__header">
-        <div className="result-tablist" role="tablist" aria-label="分析結果タブ">
-          {tabItems.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.key;
-
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => onTabChange(tab.key)}
-                className={["result-tab", isActive ? "is-active" : ""].join(" ")}
-              >
-                <Icon className="size-4" aria-hidden="true" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="result-actions">
-          <button
-            type="button"
-            className="result-save-button"
-            onClick={onSaveAsPdf}
-            disabled={!canSaveAsPdf || isSavingPdf}
-          >
-            {isSavingPdf ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                PDF出力準備中...
-              </>
-            ) : (
-              <>
-                <Download className="size-4" aria-hidden="true" />
-                PDFとして保存
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            className="result-save-button"
-            onClick={onSaveAsExcel}
-            disabled={!canSaveAsExcel || isSavingExcel}
-          >
-            {isSavingExcel ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                Excel出力準備中...
-              </>
-            ) : (
-              <>
-                <Download className="size-4" aria-hidden="true" />
-                Excelとして保存
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
       <div className="report-panel">
         {errorMessage && hasResult && <p className="history-message" role="alert">{errorMessage}</p>}
         {isAnalyzing ? (

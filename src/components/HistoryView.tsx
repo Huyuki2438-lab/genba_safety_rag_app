@@ -61,14 +61,14 @@ export function HistoryView({ onOpenKy, onSelect, onSaveAsPdf, onSaveAsExcel, is
     try { await deleteAnalysisHistory(selected.id); setSelected(null); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "削除できませんでした。"); }
   };
   return <div className="history-page">
-    <section className="history-filters"><h2>履歴</h2><p>検索ボタンで他のPCの保存結果を取得できます。破損・未対応形式の履歴は表示されません。</p><div className="filter-grid">
+    <section className="history-filters history-search-panel"><h2>履歴</h2><p>検索ボタンで他のPCの保存結果を取得できます。破損・未対応形式の履歴は表示されません。</p><div className="filter-grid">
       <label>開始日<input type="date" value={filters.dateFrom ?? ""} onChange={(e) => update("dateFrom", e.target.value)} /></label>
       <label>終了日<input type="date" value={filters.dateTo ?? ""} onChange={(e) => update("dateTo", e.target.value)} /></label>
       <label>現場名<input value={filters.siteName ?? ""} onChange={(e) => update("siteName", e.target.value)} /></label>
       <label>作業内容<input value={filters.workContent ?? ""} onChange={(e) => update("workContent", e.target.value)} /></label>
       <label>登録者<input value={filters.createdBy ?? ""} onChange={(e) => update("createdBy", e.target.value)} /></label>
       <label>キーワード<input value={filters.keyword ?? ""} onChange={(e) => update("keyword", e.target.value)} /></label>
-    </div><button type="button" className="analyze-button compact" onClick={() => void load()}>検索</button></section>
+    </div><button type="button" className="analyze-button compact history-search-button" onClick={() => void load()}>検索</button></section>
     {message && <p className="history-message" role="alert">{message}</p>}
     <section className="history-table-wrap"><table className="history-table"><thead><tr><th>日時</th><th>写真</th><th>現場名</th><th>作業内容</th><th>主な危険</th><th>登録者</th></tr></thead><tbody>
       {entries.map((entry) => <tr key={entry.id} onClick={() => setSelected(entry)}><td>{formatDate(entry.createdAt)}</td><td>{entry.imageUrl && <img loading="lazy" src={entry.imageUrl} alt="写真なし" />}</td><td>{entry.siteName}</td><td>{entry.workContent}</td><td>{entry.mainRisk}</td><td>{entry.createdBy}</td></tr>)}

@@ -5,7 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 const backendTarget = process.env.VITE_BACKEND_ORIGIN ?? "http://127.0.0.1:8000";
 
 export default defineConfig({
-  build: { outDir: "frontend_build" },
+  build: { outDir: "frontend_build", emptyOutDir: true },
   plugins: [react(), tailwindcss()],
   server: {
     watch: {

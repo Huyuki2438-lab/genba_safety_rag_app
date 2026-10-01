@@ -1,15 +1,16 @@
-"""Local browser launcher; NAS contains data only, never executable files."""
+"""Windows desktop launcher; NAS contains data only, never executable files."""
 
 from __future__ import annotations
 
 import ctypes
-import json
-import webbrowser
+from ctypes import wintypes
 import logging
 import os
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime, timedelta
@@ -21,6 +22,8 @@ from backend.app.core.app_paths import APP_NAME, local_data_root as _local_data_
 CONTROL_PORT = int(os.environ.get("KY_CONTROL_PORT", "51837"))  # 同一PC二重起動検知専用のローカルポート (mutex代わり)
 APP_PORT = int(os.environ.get("KY_APP_PORT", "51838"))  # 画面(API)用の優先ポート。使用中のときだけ空きポートへ退避する
 STARTUP_TIMEOUT_SEC = 20
+GRACEFUL_SHUTDOWN_TIMEOUT_SEC = 120
+WINDOW_TITLE = "建設現場安全管理AIアシスタント"
 
 
 def _app_dir() -> Path:
@@ -98,6 +101,8 @@ class SingleInstanceGuard:
         self._logger = logger
         self._sock: socket.socket | None = None
         self._on_show: list = []
+        self._accept_thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
 
     def try_become_primary(self) -> bool:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -108,8 +113,10 @@ class SingleInstanceGuard:
             sock.close()
             return False
         sock.listen(4)
+        sock.settimeout(0.5)
         self._sock = sock
-        threading.Thread(target=self._accept_loop, daemon=True).start()
+        self._accept_thread = threading.Thread(target=self._accept_loop, daemon=True, name="single-instance-listener")
+        self._accept_thread.start()
         return True
 
     def notify_existing_instance(self) -> bool:
@@ -124,10 +131,13 @@ class SingleInstanceGuard:
         self._on_show.append(callback)
 
     def _accept_loop(self) -> None:
-        assert self._sock is not None
-        while True:
+        sock = self._sock
+        assert sock is not None
+        while not self._stop_event.is_set():
             try:
-                conn, _ = self._sock.accept()
+                conn, _ = sock.accept()
+            except socket.timeout:
+                continue
             except OSError:
                 return
             try:
@@ -141,14 +151,209 @@ class SingleInstanceGuard:
                 try:
                     cb()
                 except Exception:
-                    self._logger.error("failed to open browser")
+                    self._logger.error("failed to show application window")
 
     def close(self) -> None:
+        self._stop_event.set()
         if self._sock is not None:
             try:
                 self._sock.close()
             except OSError:
                 pass
+            self._sock = None
+        if self._accept_thread and self._accept_thread is not threading.current_thread():
+            self._accept_thread.join(timeout=2)
+
+
+def _edge_executable() -> Path:
+    """Return the installed Microsoft Edge executable used as the desktop shell."""
+    candidates: list[Path] = []
+    on_path = shutil.which("msedge")
+    if on_path:
+        candidates.append(Path(on_path))
+    for env_name in ("PROGRAMFILES(X86)", "PROGRAMFILES", "LOCALAPPDATA"):
+        root = os.environ.get(env_name)
+        if root:
+            candidates.append(Path(root) / "Microsoft" / "Edge" / "Application" / "msedge.exe")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Microsoft Edgeが見つかりません。Edgeをインストールしてください。")
+
+
+def _window_api():
+    user32 = ctypes.windll.user32
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.IsWindow.restype = wintypes.BOOL
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.restype = wintypes.BOOL
+    user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user32.SendMessageW.restype = wintypes.LPARAM
+    return user32
+
+
+def _process_api():
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.QueryFullProcessImageNameW.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
+    ]
+    kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel32.TerminateProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    return kernel32
+
+
+def _window_title(window_handle: int) -> str:
+    user32 = _window_api()
+    length = user32.GetWindowTextLengthW(window_handle)
+    if length <= 0:
+        return ""
+    buffer = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(window_handle, buffer, length + 1)
+    return buffer.value
+
+
+def _visible_windows_for_executable(executable: Path) -> dict[int, int]:
+    """Return visible top-level windows owned by the requested executable."""
+    if sys.platform != "win32":
+        return {}
+    user32 = _window_api()
+    kernel32 = _process_api()
+    found: dict[int, int] = {}
+    enum_proc_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.EnumWindows.argtypes = [enum_proc_type, wintypes.LPARAM]
+    user32.EnumWindows.restype = wintypes.BOOL
+    expected = str(executable).casefold()
+
+    @enum_proc_type
+    def visit(hwnd, _lparam):
+        if not user32.IsWindowVisible(hwnd) or user32.GetWindowTextLengthW(hwnd) <= 0:
+            return True
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        handle = kernel32.OpenProcess(0x1000, False, owner.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return True
+        try:
+            size = wintypes.DWORD(32768)
+            image_path = ctypes.create_unicode_buffer(size.value)
+            if kernel32.QueryFullProcessImageNameW(handle, 0, image_path, ctypes.byref(size)):
+                if image_path.value.casefold() == expected:
+                    found[int(hwnd)] = int(owner.value)
+        finally:
+            kernel32.CloseHandle(handle)
+        return True
+
+    user32.EnumWindows(visit, 0)
+    return found
+
+
+def _wait_for_process_exit(process_id: int, timeout_ms: int, *, terminate_on_timeout: bool) -> None:
+    """Wait for a Windows process not represented by our Popen object."""
+    kernel32 = _process_api()
+    handle = kernel32.OpenProcess(0x00100001, False, process_id)  # SYNCHRONIZE | PROCESS_TERMINATE
+    if not handle:
+        return
+    try:
+        if kernel32.WaitForSingleObject(handle, timeout_ms) == 0x00000102 and terminate_on_timeout:
+            kernel32.TerminateProcess(handle, 0)
+            kernel32.WaitForSingleObject(handle, 5000)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+class DesktopWindow:
+    """A dedicated Edge app window whose lifetime owns the local backend."""
+
+    def __init__(self, url: str, logger: logging.Logger) -> None:
+        self._url = url
+        self._logger = logger
+        self._process: subprocess.Popen | None = None
+        self._window_handle: int | None = None
+        self._window_process_id: int | None = None
+        self._profile = tempfile.TemporaryDirectory(prefix="ky-safety-window-", ignore_cleanup_errors=True)
+
+    def open(self) -> None:
+        edge = _edge_executable()
+        existing_windows = set(_visible_windows_for_executable(edge))
+        creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+        self._process = subprocess.Popen(
+            [
+                str(edge),
+                f"--app={self._url}",
+                f"--user-data-dir={self._profile.name}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-background-mode",
+                "--disable-extensions",
+                "--start-maximized",
+            ],
+            close_fds=True,
+            creationflags=creationflags,
+        )
+        deadline = time.monotonic() + STARTUP_TIMEOUT_SEC
+        while time.monotonic() < deadline:
+            new_windows = {
+                hwnd: owner
+                for hwnd, owner in _visible_windows_for_executable(edge).items()
+                if hwnd not in existing_windows and _window_title(hwnd) == WINDOW_TITLE
+            }
+            if new_windows:
+                self._window_handle, self._window_process_id = next(iter(new_windows.items()))
+                return
+            time.sleep(0.1)
+        raise RuntimeError("Microsoft Edgeのアプリウィンドウの起動がタイムアウトしました。")
+
+    def is_open(self) -> bool:
+        if self._window_handle is None:
+            return False
+        return bool(_window_api().IsWindow(self._window_handle))
+
+    def show(self) -> None:
+        if not self.is_open():
+            return
+        # Restore a minimized window and bring it to the foreground on duplicate launch.
+        user32 = _window_api()
+        user32.ShowWindow(self._window_handle, 9)  # SW_RESTORE
+        user32.SetForegroundWindow(self._window_handle)
+
+    def close(self) -> None:
+        process = self._process
+        user32 = _window_api()
+        if self._window_handle is not None and user32.IsWindow(self._window_handle):
+            user32.SendMessageW(self._window_handle, 0x0010, 0, 0)  # WM_CLOSE
+        if self._window_process_id is not None:
+            _wait_for_process_exit(self._window_process_id, 10_000, terminate_on_timeout=True)
+        if process is not None and process.poll() is None and process.pid != self._window_process_id:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        self._process = None
+        self._window_handle = None
+        self._window_process_id = None
+        try:
+            self._profile.cleanup()
+        except OSError as exc:
+            self._logger.warning("Could not remove temporary desktop window profile: %s", exc)
 
 
 def _import_app_with_retry(logger: logging.Logger):
@@ -187,20 +392,33 @@ def main() -> int:
         return 0
     server = None
     server_thread = None
+    desktop_window = None
     result = 0
     try:
         app = _import_app_with_retry(logger)
         import uvicorn
+
+        def request_server_shutdown(reason: str) -> None:
+            if server is not None and not server.should_exit:
+                logger.info("Graceful shutdown requested: %s", reason)
+                server.should_exit = True
+
         @app.post("/api/v1/shutdown")
         def shutdown():
-            threading.Timer(0.3, lambda: setattr(server, "should_exit", True)).start()
+            # This endpoint remains only for setup-driven restart and automated
+            # lifecycle tests. The normal user exit path is the window close event.
+            timer = threading.Timer(0.3, request_server_shutdown, args=("internal lifecycle API",))
+            timer.daemon = True
+            timer.start()
             return {"stopping": True}
+
         port = _find_free_port()
         config = uvicorn.Config(app, host="127.0.0.1", port=port,
                                 log_config=None, access_log=False, log_level="critical",
-                                loop="asyncio", http="h11", ws="none")
+                                loop="asyncio", http="h11", ws="none",
+                                timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_TIMEOUT_SEC)
         server = uvicorn.Server(config)
-        server_thread = threading.Thread(target=server.run, daemon=True)
+        server_thread = threading.Thread(target=server.run, daemon=True, name="local-web-server")
         server_thread.start()
         deadline = time.monotonic() + 30
         while not server.started and server_thread.is_alive() and time.monotonic() < deadline:
@@ -208,16 +426,18 @@ def main() -> int:
         if not server.started:
             raise RuntimeError()
         url = f"http://127.0.0.1:{port}/"
-        def show():
-            if os.environ.get("KY_NO_BROWSER") != "1":
-                webbrowser.open(url)
-        guard.set_show_callback(show)
         logger.info("Application started on local port %s", port)
-        show()
-        # Wait for the user's explicit in-app exit. Closing an ordinary browser
-        # tab is not a reliable application-lifecycle signal.
+        if os.environ.get("KY_NO_BROWSER") != "1":
+            desktop_window = DesktopWindow(url, logger)
+            desktop_window.open()
+            guard.set_show_callback(desktop_window.show)
+            logger.info("Desktop window opened")
+
         while server_thread.is_alive():
-            server_thread.join(timeout=0.5)
+            if desktop_window is not None and not desktop_window.is_open():
+                request_server_shutdown("desktop window closed")
+                break
+            server_thread.join(timeout=0.25)
     except Exception as exc:
         logger.error("Startup or runtime failed (%s): %s", type(exc).__name__, exc)
         detail = str(exc).strip()
@@ -229,7 +449,13 @@ def main() -> int:
         if server:
             server.should_exit = True
         if server_thread:
-            server_thread.join(timeout=100)
+            server_thread.join(timeout=GRACEFUL_SHUTDOWN_TIMEOUT_SEC + 5)
+            if server_thread.is_alive():
+                logger.error("Graceful shutdown timed out; forcing the local server to stop")
+                server.force_exit = True
+                server_thread.join(timeout=10)
+        if desktop_window:
+            desktop_window.close()
         guard.close()
         logger.info("Application stopped")
 

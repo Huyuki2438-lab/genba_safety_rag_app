@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ImagePlus, Trash2, Upload } from "lucide-react";
+import { ImagePlus, Trash2 } from "lucide-react";
 
 type ImageUploadPanelProps = {
   selectedImage: File | null;
@@ -24,12 +24,23 @@ export function ImageUploadPanel({
     onImageChange(selected);
   };
 
+  const openFilePicker = () => fileInputRef.current?.click();
+
   return (
     <section className="upload-panel">
       <h2 className="panel-title">1. 画像を選択</h2>
-      <p className="panel-description">現場写真を1枚選ぶと、右側で分析結果を確認できます。</p>
-
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="画像をドラッグ＆ドロップ、またはクリックして選択"
+        onClick={openFilePicker}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openFilePicker();
+          }
+        }}
         onDragOver={(event) => {
           event.preventDefault();
           setIsDragActive(true);
@@ -55,7 +66,11 @@ export function ImageUploadPanel({
               </p>
               <button
                 type="button"
-                onClick={() => onImageChange(null)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                  onImageChange(null);
+                }}
                 className="upload-clear-button"
               >
                 <Trash2 className="size-4" aria-hidden="true" />
@@ -66,7 +81,7 @@ export function ImageUploadPanel({
         ) : (
           <div className="upload-dropzone__empty">
             <ImagePlus className="size-8" aria-hidden="true" />
-            <p>ここに画像をドラッグ＆ドロップ</p>
+            <p>画像をドラッグ＆ドロップ<br />またはクリックして選択</p>
           </div>
         )}
       </div>
@@ -76,17 +91,11 @@ export function ImageUploadPanel({
         type="file"
         accept={IMAGE_ACCEPT}
         className="hidden"
-        onChange={(event) => handleFilePick(event.target.files)}
+        onChange={(event) => {
+          handleFilePick(event.target.files);
+          event.target.value = "";
+        }}
       />
-
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        className="secondary-button"
-      >
-        <Upload className="size-5" aria-hidden="true" />
-        画像を選択する
-      </button>
     </section>
   );
 }

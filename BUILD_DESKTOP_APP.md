@@ -4,7 +4,7 @@
 
 ## 前提
 
-- Windows 10/11、Edge WebView2 Runtime
+- Windows 10/11、Microsoft Edge
 - Vertex AIの設定値（`VERTEX_API_KEY`・`GEMINI_MODEL`・`GOOGLE_CLOUD_PROJECT`・`GOOGLE_CLOUD_LOCATION`）を入れた `.env`
 - Node.js と Python仮想環境
 

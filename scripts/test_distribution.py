@@ -119,6 +119,10 @@ if __name__ == "__main__":
         (BASE/'verified.pdf').write_bytes(pdf[1])
         report_list=json.loads(call(b,f'/api/v1/history/{ids[0]}/reports')[1])['reports']
         check("PC B reads shared PDF",bool(report_list) and call(b,report_list[0]['url'])[0]==200)
+        excel=call(a,"/api/v1/excel",{"record_id":ids[0],"generated_at":"2026/10/01 12:00",
+            "markdown":payload["markdown"],"output_filename":"検証レポート.xlsx","site_name":"テスト現場",
+            "work_content":"掘削","main_risk":"重機接触","image_data_url":"data:image/png;base64,"+payload["imageBase64"]})
+        check("Excel generated and saved to NAS folder",excel[0]==200 and excel[1].startswith(b'PK') and len(list((SHARED/'reports').rglob('*.xlsx')))==1)
         exported=call(b,f'/api/v1/history/{ids[0]}/export',{})
         check("export ZIP shared",exported[0]==200 and exported[1].startswith(b'PK') and len(list((SHARED/'export').glob('*.zip')))==1)
         (SHARED/'records'/'broken.json').write_text('{')
@@ -160,7 +164,7 @@ if __name__ == "__main__":
                 check_secret(page.content().encode())
                 page.screenshot(path=str(BASE/'main.png'),full_page=True)
                 with page.expect_download() as download:
-                    page.get_by_role('button',name='PDFとして保存',exact=True).click()
+                    page.get_by_role('button',name='PDF',exact=True).click()
                 download.value.save_as(str(BASE/'ui-download.pdf'))
                 check('PDF button downloads saved shared report', (BASE/'ui-download.pdf').read_bytes().startswith(b'%PDF'))
                 ai_calls=[]

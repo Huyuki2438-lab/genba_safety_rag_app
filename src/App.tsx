@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AppNavigation, type AppPage } from "./components/AppNavigation";
+import type { AppPage } from "./components/AppNavigation";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { DevicePreviewFrame } from "./components/DevicePreviewFrame";
 import { Header } from "./components/Header";
 import { ImageUploadPanel } from "./components/ImageUploadPanel";
-import { ResultTabs } from "./components/ResultTabs";
+import { ResultTabs, ResultToolbar } from "./components/ResultTabs";
 import { HistoryView } from "./components/HistoryView";
 import { SettingsView } from "./components/SettingsView";
 import { SetupWizard } from "./components/SetupWizard";
@@ -303,9 +303,8 @@ function App() {
   if (page === "history") {
     return (
       <div className="app-shell">
-        <Header />
+        <Header activePage="history" onNavigate={navigate} />
         <main className="app-main">
-          <AppNavigation activePage="history" onNavigate={navigate} />
           <HistoryView onOpenKy={() => navigate("create")} onSelect={handleSelectHistory} onSaveAsPdf={generatePdf} onSaveAsExcel={generateExcel} isSavingPdf={isSavingPdf} isSavingExcel={isSavingExcel} />
         </main>
       </div>
@@ -315,9 +314,8 @@ function App() {
   if (page === "settings") {
     return (
       <div className="app-shell">
-        <Header />
+        <Header activePage="settings" onNavigate={navigate} />
         <main className="app-main">
-          <AppNavigation activePage="settings" onNavigate={navigate} />
           <SettingsView />
         </main>
       </div>
@@ -326,11 +324,9 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Header />
+      <Header activePage="create" onNavigate={navigate} />
 
       <main className="app-main">
-        <AppNavigation activePage="create" onNavigate={navigate} />
-
         {pendingSave && !isAnalyzing && <div role="alert"><p>分析結果はまだ保存されていません。NAS復旧後、先に履歴で保存済みか確認してください。</p><button onClick={() => void retrySave()}>分析結果の保存を再試行</button></div>}
         <div className="main-grid">
           <section className="operation-column">
@@ -356,19 +352,26 @@ function App() {
           </section>
 
           <section className="result-column">
-            <DevicePreviewFrame imagePreviewUrl={imagePreviewUrl}>
+            <DevicePreviewFrame
+              imagePreviewUrl={imagePreviewUrl}
+              toolbar={(
+                <ResultToolbar
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  canSaveAsPdf={canSavePdf}
+                  isSavingPdf={isSavingPdf}
+                  onSaveAsPdf={handleSaveAsPdf}
+                  canSaveAsExcel={canSavePdf}
+                  isSavingExcel={isSavingExcel}
+                  onSaveAsExcel={handleSaveAsExcel}
+                />
+              )}
+            >
               <ResultTabs
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
                 isAnalyzing={isAnalyzing}
                 analysisMarkdown={analysisMarkdown}
                 errorMessage={errorMessage}
-                canSaveAsPdf={canSavePdf}
-                isSavingPdf={isSavingPdf}
-                onSaveAsPdf={handleSaveAsPdf}
-                canSaveAsExcel={canSavePdf}
-                isSavingExcel={isSavingExcel}
-                onSaveAsExcel={handleSaveAsExcel}
               />
             </DevicePreviewFrame>
           </section>

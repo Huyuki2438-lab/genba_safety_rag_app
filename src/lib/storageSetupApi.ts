@@ -7,6 +7,8 @@ import {
   SETUP_VALIDATE_ENDPOINT
 } from "../constants/endpoints";
 
+export type StorageType = "local" | "nas";
+
 export type SetupStatus = {
   configured: boolean;
   dataRoot: string | null;
@@ -25,16 +27,40 @@ export type CheckResult = {
   detectedProjectName?: string | null;
 };
 
+export const BACKEND_UNREACHABLE_MESSAGE = "アプリ内部の通信に失敗しました。バックエンドの起動状態を確認してください。";
+
+/** バックエンドAPIへ接続できなかった(接続拒否・サーバー停止・ポート不一致など)ことを表す。 */
+export class BackendUnreachableError extends Error {
+  constructor() {
+    super(BACKEND_UNREACHABLE_MESSAGE);
+    this.name = "BackendUnreachableError";
+  }
+}
+
+/** fetchの生の "Failed to fetch" を利用者画面へ出さないため、通信失敗を専用エラーへ変換する。 */
+const apiFetch = async (input: string, init?: RequestInit): Promise<Response> => {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new BackendUnreachableError();
+  }
+};
+
 const asJson = async <T,>(response: Response): Promise<T> => {
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error((body && (body.detail ?? body.message)) || "通信に失敗しました。");
+    const detail = body && (body.detail ?? body.message);
+    throw new Error(
+      typeof detail === "string" && detail
+        ? detail
+        : `アプリ内部でエラーが発生しました（HTTP ${response.status}）。アプリを再起動しても直らない場合は管理者へ連絡してください。`
+    );
   }
   return response.json() as Promise<T>;
 };
 
 export async function fetchSetupStatus(): Promise<SetupStatus> {
-  const response = await fetch(SETUP_STATUS_ENDPOINT);
+  const response = await apiFetch(SETUP_STATUS_ENDPOINT);
   const data = await asJson<{
     configured: boolean;
     data_root: string | null;
@@ -58,7 +84,7 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
 }
 
 export async function browseForFolder(): Promise<{ path: string | null; available: boolean }> {
-  const response = await fetch(SETUP_BROWSE_ENDPOINT, {
+  const response = await apiFetch(SETUP_BROWSE_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}"
@@ -81,7 +107,7 @@ const toCheckResult = (data: CheckResponseBody): CheckResult => ({
 });
 
 export async function validateDataRoot(path: string): Promise<CheckResult> {
-  const response = await fetch(SETUP_VALIDATE_ENDPOINT, {
+  const response = await apiFetch(SETUP_VALIDATE_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path })
@@ -89,17 +115,22 @@ export async function validateDataRoot(path: string): Promise<CheckResult> {
   return toCheckResult(await asJson<CheckResponseBody>(response));
 }
 
-export async function saveDataRoot(path: string, projectId: string, projectName: string): Promise<CheckResult> {
-  const response = await fetch(SETUP_SAVE_ENDPOINT, {
+export async function saveDataRoot(
+  path: string,
+  projectId: string,
+  projectName: string,
+  storageType: StorageType
+): Promise<CheckResult> {
+  const response = await apiFetch(SETUP_SAVE_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, project_id: projectId, project_name: projectName })
+    body: JSON.stringify({ path, project_id: projectId, project_name: projectName, storage_type: storageType })
   });
   return toCheckResult(await asJson<CheckResponseBody>(response));
 }
 
 export async function connectNetworkCredentials(path: string, username: string, password: string): Promise<CheckResult> {
-  const response = await fetch(SETUP_CONNECT_CREDENTIALS_ENDPOINT, {
+  const response = await apiFetch(SETUP_CONNECT_CREDENTIALS_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path, username, password })
@@ -108,7 +139,7 @@ export async function connectNetworkCredentials(path: string, username: string, 
 }
 
 export async function requestAppRestart(): Promise<void> {
-  await fetch(SETUP_RESTART_ENDPOINT, {
+  await apiFetch(SETUP_RESTART_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}"

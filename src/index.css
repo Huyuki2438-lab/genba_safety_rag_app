@@ -98,7 +98,8 @@ body {
   min-height: 40px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font: inherit;
 }
 
-.history-page { overflow-y: auto; }
+.history-page { display: flex; flex-direction: column; gap: 16px; }
+.app-navigation { flex-shrink: 0; }
 .history-filters, .history-table-wrap, .history-detail { padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
 .history-filters h2, .history-detail h2 { margin: 0 0 14px; }
 .filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
@@ -481,39 +482,6 @@ body {
   flex-wrap: wrap;
 }
 
-.history-picker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-
-.history-picker__select {
-  min-width: 230px;
-  max-width: 320px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  outline: none;
-  cursor: pointer;
-}
-
-.history-picker:has(.history-picker__select:disabled) {
-  opacity: 0.62;
-}
-
-.history-picker__select:disabled {
-  cursor: not-allowed;
-}
-
 .result-save-button:disabled {
   opacity: 0.62;
   cursor: not-allowed;
@@ -630,7 +598,6 @@ body {
 .mode-chip:focus-visible,
 .result-tab:focus-visible,
 .result-save-button:focus-visible,
-.history-picker__select:focus-visible,
 .analyze-button:focus-visible,
 .secondary-button:focus-visible,
 .upload-clear-button:focus-visible {
@@ -696,16 +663,10 @@ body {
   .mode-chip,
   .result-tab,
   .result-save-button,
-  .history-picker,
   .secondary-button,
   .upload-clear-button {
     min-height: 44px;
     font-size: 0.94rem;
-  }
-
-  .history-picker__select {
-    min-width: 170px;
-    max-width: 220px;
   }
 
   .analyze-button {

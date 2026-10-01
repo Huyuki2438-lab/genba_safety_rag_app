@@ -2,14 +2,13 @@ import { useMemo } from "react";
 import {
   AlertCircle,
   AlertTriangle,
-  Clock3,
   Download,
   FileText,
   Info,
   Lightbulb,
   Loader2
 } from "lucide-react";
-import type { AnalysisSectionKey, AnalysisHistoryEntry } from "../types/analysis";
+import type { AnalysisSectionKey } from "../types/analysis";
 import type { ResultTabKey } from "../types/ui";
 import { parseAnalysisSections } from "../utils/parseAnalysisSections";
 import { renderMarkdownToHtml } from "../utils/renderMarkdownToHtml";
@@ -20,9 +19,6 @@ type ResultTabsProps = {
   onTabChange: (tab: ResultTabKey) => void;
   isAnalyzing: boolean;
   analysisMarkdown: string;
-  analysisHistory: AnalysisHistoryEntry[];
-  activeHistoryId: string | null;
-  onSelectHistory: (historyId: string) => void;
   errorMessage: string | null;
   canSaveAsPdf: boolean;
   isSavingPdf: boolean;
@@ -56,31 +52,11 @@ const sectionConfigByTab: Record<
   additional: [{ key: "ADDITIONAL", title: "補足事項" }]
 };
 
-const formatHistoryDate = (isoDate: string): string => {
-  const date = new Date(isoDate);
-  if (Number.isNaN(date.getTime())) return "日時不明";
-
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
-};
-
-const toHistoryOptionLabel = (entry: AnalysisHistoryEntry): string => {
-  return `${formatHistoryDate(entry.createdAt)} | ${entry.imageName}`;
-};
-
 export function ResultTabs({
   activeTab,
   onTabChange,
   isAnalyzing,
   analysisMarkdown,
-  analysisHistory,
-  activeHistoryId,
-  onSelectHistory,
   errorMessage,
   canSaveAsPdf,
   isSavingPdf,
@@ -132,35 +108,6 @@ export function ResultTabs({
         </div>
 
         <div className="result-actions">
-          <label className="history-picker" htmlFor="analysis-history-select">
-            <Clock3 className="size-4" aria-hidden="true" />
-            <span>過去の出力</span>
-            <select
-              id="analysis-history-select"
-              className="history-picker__select"
-              value={activeHistoryId ?? ""}
-              onChange={(event) => {
-                const historyId = event.target.value;
-                if (!historyId) return;
-                onSelectHistory(historyId);
-              }}
-              disabled={analysisHistory.length === 0 || isAnalyzing}
-            >
-              {analysisHistory.length === 0 ? (
-                <option value="">履歴はまだありません</option>
-              ) : (
-                <>
-                  <option value="">履歴を選択</option>
-                  {analysisHistory.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      {toHistoryOptionLabel(entry)}
-                    </option>
-                  ))}
-                </>
-              )}
-            </select>
-          </label>
-
           <button
             type="button"
             className="result-save-button"

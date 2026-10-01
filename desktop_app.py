@@ -19,6 +19,7 @@ from pathlib import Path
 from backend.app.core.app_paths import APP_NAME, local_data_root as _local_data_root, restart_flag_path
 
 CONTROL_PORT = int(os.environ.get("KY_CONTROL_PORT", "51837"))  # 同一PC二重起動検知専用のローカルポート (mutex代わり)
+APP_PORT = int(os.environ.get("KY_APP_PORT", "51838"))  # 画面(API)用の優先ポート。使用中のときだけ空きポートへ退避する
 STARTUP_TIMEOUT_SEC = 20
 
 
@@ -69,9 +70,19 @@ def _fatal_message_box(title: str, message: str) -> None:
 
 
 def _find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    """優先ポートが空いていればそれを使う。
+
+    起動ごとにポートが変わると、再起動前から開いたままの古いブラウザタブが
+    存在しないポートへ通信して「Failed to fetch」になるため、同じポートを使い回す。
+    """
+    for candidate in (APP_PORT, 0):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", candidate))
+            except OSError:
+                continue
+            return s.getsockname()[1]
+    raise OSError("利用できるローカルポートがありません。")
 
 
 class SingleInstanceGuard:

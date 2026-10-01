@@ -91,20 +91,21 @@ def main():
         status = json.loads(body)
         check("status reports not configured on first launch", status_code == 200 and status["configured"] is False)
 
-        # A nonexistent folder must fail validation with the exact required message.
-        missing_code, missing_body = call(port, "/api/v1/setup/validate", {"path": str(BASE / "does_not_exist")})
+        # A nonexistent folder (and its parents) is created automatically by the check.
+        auto_dir = BASE / "auto" / "created" / "data"
+        missing_code, missing_body = call(port, "/api/v1/setup/validate", {"path": str(auto_dir)})
         missing_msg = json.loads(missing_body)["message"]
         check(
-            "validating a missing folder fails with required guidance message",
-            missing_code == 200 and "保存先にアクセスできません" in missing_msg,
+            "validating a missing local folder auto-creates it and succeeds",
+            missing_code == 200 and auto_dir.is_dir() and missing_msg.startswith("保存先に接続できました。"),
         )
 
-        data_dir.mkdir(parents=True)
+        data_dir.mkdir(parents=True, exist_ok=True)
         ok_code, ok_body = call(port, "/api/v1/setup/validate", {"path": str(data_dir)})
         ok_msg = json.loads(ok_body)["message"]
         check(
             "validating an existing writable local folder succeeds with required message",
-            ok_code == 200 and ok_msg.startswith("保存先への接続を確認しました。"),
+            ok_code == 200 and ok_msg.startswith("保存先に接続できました。"),
         )
 
         save_code, save_body = call(

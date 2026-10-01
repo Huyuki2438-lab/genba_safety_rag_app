@@ -1,7 +1,7 @@
 """初期設定(データ保存先の選択・検証・保存)API。
 
 secrets.env / APIキーはここでは一切扱わない。設定変更はconfig.jsonの
-data_root(・project_id/project_nameの保持・storage_typeの自動判定)のみ行う。
+project_id・project_name・data_root・storage_typeのみ行う(他の項目は保持)。
 """
 from __future__ import annotations
 
@@ -14,17 +14,15 @@ from fastapi.concurrency import run_in_threadpool
 from backend.app.core.app_paths import restart_flag_path
 from backend.app.core.config import settings
 from backend.app.core.storage_setup import (
+    apply_setup,
     connect_network_credentials,
     current_data_root,
     normalize_path,
+    normalize_storage_type,
     open_folder_dialog,
     read_raw_config,
     read_site_marker,
-    save_data_root,
     validate_data_root,
-    validate_project_id,
-    validate_project_name,
-    write_site_marker,
 )
 from backend.app.schemas.setup import (
     BrowseFolderResponse,
@@ -55,13 +53,13 @@ async def get_status() -> SetupStatusResponse:
     return SetupStatusResponse(
         configured=configured,
         data_root=data_root,
-        storage_type=(raw.get("storage_type") or None),
+        storage_type=(normalize_storage_type(raw.get("storage_type")) or None),
         config_error=None,
         reachable=reachable,
         reachable_message=reachable_message,
         project_id=project_id,
         project_name=(str(raw.get("project_name") or "").strip() or None),
-        project_id_locked=project_id is not None,
+        project_id_locked=False,
     )
 
 
@@ -88,7 +86,7 @@ async def connect_credentials(req: NetworkCredentialsRequest) -> DataRootCheckRe
 
 @router.post("/validate", response_model=DataRootCheckResponse)
 async def validate(req: DataRootRequest) -> DataRootCheckResponse:
-    ok, message = await run_in_threadpool(validate_data_root, req.path)
+    ok, message = await run_in_threadpool(validate_data_root, req.path, True)
     detected = None
     if ok:
         detected = await run_in_threadpool(read_site_marker, normalize_path(req.path))
@@ -102,54 +100,10 @@ async def validate(req: DataRootRequest) -> DataRootCheckResponse:
 
 @router.post("/save", response_model=DataRootCheckResponse)
 async def save(req: DataRootRequest) -> DataRootCheckResponse:
-    raw = read_raw_config(settings.CONFIG_FILE)
-    local_project_id = str(raw.get("project_id") or "").strip()
-    project_id_locked = bool(local_project_id)
-
-    ok, message = validate_project_name(req.project_name or "")
-    if not ok:
-        return DataRootCheckResponse(ok=False, message=message)
-    if not project_id_locked:
-        ok, message = validate_project_id(req.project_id or "")
-        if not ok:
-            return DataRootCheckResponse(ok=False, message=message)
-
-    ok, message = await run_in_threadpool(validate_data_root, req.path)
-    if not ok:
-        return DataRootCheckResponse(ok=False, message=message)
-
-    # 保存先に既に別PCが設定した現場情報がないか確認し、現場の混在を防ぐ。
-    target_path = normalize_path(req.path)
-    marker = await run_in_threadpool(read_site_marker, target_path)
-    detected_note = ""
-    request_project_id = req.project_id
-    request_project_name = req.project_name
-    if marker:
-        if project_id_locked and marker["project_id"] != local_project_id:
-            return DataRootCheckResponse(
-                ok=False,
-                message=(
-                    f"この保存先には既に別の現場（現場ID: {marker['project_id']}、"
-                    f"現場名: {marker['project_name'] or '不明'}）のデータがあります。"
-                    f"このPCに設定されている現場ID（{local_project_id}）と一致しません。"
-                    "保存先のフォルダを間違えていないかご確認ください。"
-                ),
-            )
-        if not project_id_locked:
-            # 初回設定時は、手入力の値より保存先に既にある現場情報を優先する
-            # (複数PCで現場ID・現場名がずれるのを防ぐため)。
-            request_project_id = marker["project_id"]
-            request_project_name = marker["project_name"] or req.project_name
-            detected_note = (
-                f"\n\nこの保存先の既存の現場情報（現場ID: {request_project_id}、"
-                f"現場名: {request_project_name}）を使用しました。"
-            )
-
-    final_project_id, final_project_name = await run_in_threadpool(
-        save_data_root, settings.CONFIG_FILE, req.path, request_project_id, request_project_name
+    ok, message = await run_in_threadpool(
+        apply_setup, settings.CONFIG_FILE, req.path, req.project_id, req.project_name, req.storage_type
     )
-    await run_in_threadpool(write_site_marker, target_path, final_project_id, final_project_name)
-    return DataRootCheckResponse(ok=True, message=message + detected_note)
+    return DataRootCheckResponse(ok=ok, message=message)
 
 
 @router.post("/restart")

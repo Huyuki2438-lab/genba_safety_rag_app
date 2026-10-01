@@ -1,11 +1,13 @@
 import { useState } from "react";
 import {
+  BACKEND_UNREACHABLE_MESSAGE,
   browseForFolder,
   connectNetworkCredentials,
   requestAppRestart,
   saveDataRoot,
   validateDataRoot,
-  type CheckResult
+  type CheckResult,
+  type StorageType
 } from "../lib/storageSetupApi";
 
 type StorageSetupPanelProps = {
@@ -13,8 +15,35 @@ type StorageSetupPanelProps = {
   initialDataRoot?: string | null;
   initialProjectId?: string | null;
   initialProjectName?: string | null;
+  initialStorageType?: string | null;
   projectIdLocked?: boolean;
-  onCancel?: () => void;
+};
+
+type FieldErrors = { projectId?: string; projectName?: string; path?: string; storageType?: string };
+
+const PROJECT_ID_FORBIDDEN = /[\\/:*?"<>|\u0000-\u001f]/;
+
+const guessStorageType = (path: string): StorageType => {
+  const text = path.trim();
+  return text.startsWith("\\\\") || text.startsWith("//") ? "nas" : "local";
+};
+
+const validateFields = (projectId: string, projectName: string, path: string, storageType: string): FieldErrors => {
+  const errors: FieldErrors = {};
+  const id = projectId.trim();
+  if (!id) errors.projectId = "プロジェクト番号を入力してください。";
+  else if (id.length > 50) errors.projectId = "プロジェクト番号は50文字以内で入力してください。";
+  else if (PROJECT_ID_FORBIDDEN.test(id)) errors.projectId = "プロジェクト番号に使えない文字が含まれています（例: 001）。";
+  const name = projectName.trim();
+  if (!name) errors.projectName = "プロジェクト名を入力してください。";
+  else if (name.length > 200) errors.projectName = "プロジェクト名は200文字以内で入力してください。";
+  const dir = path.trim();
+  if (!dir) errors.path = "データ保存先を入力または選択してください。";
+  else if (!/^([a-zA-Z]:[\\/]|\\\\|\/\/)/.test(dir)) {
+    errors.path = "絶対パスで指定してください（例: C:\\KY安全管理\\data　または　\\\\NAS\\共有\\data）。";
+  }
+  if (storageType !== "local" && storageType !== "nas") errors.storageType = "保存先種別を選択してください。";
+  return errors;
 };
 
 export function StorageSetupPanel({
@@ -22,12 +51,19 @@ export function StorageSetupPanel({
   initialDataRoot,
   initialProjectId,
   initialProjectName,
-  projectIdLocked = false,
-  onCancel
+  initialStorageType,
+  projectIdLocked = false
 }: StorageSetupPanelProps) {
   const [path, setPath] = useState(initialDataRoot ?? "");
   const [projectId, setProjectId] = useState(initialProjectId ?? "");
   const [projectName, setProjectName] = useState(initialProjectName ?? "");
+  const hasInitialStorageType = initialStorageType === "local" || initialStorageType === "nas";
+  const [storageType, setStorageType] = useState<StorageType>(
+    hasInitialStorageType ? (initialStorageType as StorageType) : guessStorageType(initialDataRoot ?? "")
+  );
+  // 利用者が種別を明示的に選んだ後は、パス入力に応じた自動切替をしない。
+  const [storageTypeTouched, setStorageTypeTouched] = useState(hasInitialStorageType);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isBrowsing, setIsBrowsing] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -47,14 +83,23 @@ export function StorageSetupPanel({
   const isChangingDataRoot =
     mode === "change" && previousDataRoot !== "" && path.trim() !== "" && path.trim() !== previousDataRoot;
   const isNetworkPath = path.trim().startsWith("\\\\") || path.trim().startsWith("//");
-  const projectIdIsLocked = projectIdLocked || detectedFromStorage;
-  const projectIdMissing = !projectIdIsLocked && !projectId.trim();
-  const canSave =
-    !busy && path.trim() !== "" && !projectIdMissing && projectName.trim() !== "" && (!isChangingDataRoot || migrationAcked);
+  // 設定画面(change)ではプロジェクト番号も変更できる。初回設定では、保存先に既存の現場情報があればそれを使う。
+  const projectIdIsLocked = mode === "initial" && (projectIdLocked || detectedFromStorage);
+  const canSave = !busy && (!isChangingDataRoot || migrationAcked);
+  const clearFieldError = (key: keyof FieldErrors): void => setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
+  const fieldError = (key: keyof FieldErrors) =>
+    fieldErrors[key] ? (
+      <p className="setup-wizard__status setup-wizard__status--ng" role="alert">
+        {fieldErrors[key]}
+      </p>
+    ) : null;
+  const syncStorageTypeWithPath = (value: string): void => {
+    if (!storageTypeTouched) setStorageType(guessStorageType(value));
+  };
 
   const applyCheckResult = (result: CheckResult): void => {
     setCheckResult(result);
-    if (!projectIdLocked && result.detectedProjectId) {
+    if (mode === "initial" && !projectIdLocked && result.detectedProjectId) {
       setProjectId(result.detectedProjectId);
       setProjectName(result.detectedProjectName || projectName);
       setDetectedFromStorage(true);
@@ -72,11 +117,14 @@ export function StorageSetupPanel({
         setBrowseUnavailable(true);
       } else if (result.path) {
         setPath(result.path);
+        clearFieldError("path");
+        syncStorageTypeWithPath(result.path);
         setMigrationAcked(false);
         setDetectedFromStorage(false);
       }
-    } catch {
-      setBrowseUnavailable(true);
+    } catch (error) {
+      // 通信失敗は「フォルダ選択が使えない」のではなくバックエンドとの接続不良なので、別メッセージで区別する。
+      setCheckResult({ ok: false, message: error instanceof Error ? error.message : BACKEND_UNREACHABLE_MESSAGE });
     } finally {
       setIsBrowsing(false);
     }
@@ -108,10 +156,13 @@ export function StorageSetupPanel({
   };
 
   const handleSave = async (): Promise<void> => {
-    setIsSaving(true);
     setCheckResult(null);
+    const errors = validateFields(projectId, projectName, path, storageType);
+    setFieldErrors(errors);
+    if (Object.values(errors).some(Boolean)) return;
+    setIsSaving(true);
     try {
-      const result = await saveDataRoot(path, projectId, projectName);
+      const result = await saveDataRoot(path.trim(), projectId.trim(), projectName.trim(), storageType);
       applyCheckResult(result);
       if (result.ok) {
         setSaved(true);
@@ -129,6 +180,7 @@ export function StorageSetupPanel({
       <div className="setup-wizard__card" role="status">
         <h2 className="panel-title">設定が完了しました</h2>
         <p>設定を保存しました。設定を反映するため、アプリを再起動しています。</p>
+        <p>自動で再起動されない場合は、設定を反映するためアプリを再起動してください。</p>
         <p>まもなく新しいウィンドウが自動的に開きます。開いたら、この画面は閉じてください。</p>
       </div>
     );
@@ -136,48 +188,58 @@ export function StorageSetupPanel({
 
   return (
     <div className="setup-wizard__card">
-      <h2 className="panel-title">{mode === "initial" ? "データ保存先の初期設定" : "データ保存先の設定"}</h2>
+      <h2 className="panel-title">{mode === "initial" ? "初回セットアップ" : "プロジェクト・データ保存設定"}</h2>
       <p className="panel-description">
-        危険分析の履歴・写真・PDF・Excelを保存する場所を選びます。パソコン内のフォルダ、または社内NASの共有フォルダ（例：{"\\\\NAS\\共有\\現場安全\\データ"}）のどちらも指定できます。
+        危険分析の履歴・写真・PDF・Excelを保存する場所を選びます。パソコン内のフォルダ、または社内NASの共有フォルダ（例：{"\\\\NAS\\共有\\現場安全\\データ"}）のどちらも指定できます。空のフォルダでも、必要なフォルダは自動で作成されます。
       </p>
+      {mode === "initial" && (
+        <p className="setup-wizard__hint">
+          「参照...」でフォルダを選び、プロジェクト番号とプロジェクトネームを入力して「設定して開始」を押してください。
+          同じ保存先を使う2台目以降のパソコンでは、保存先を選ぶとプロジェクト番号・プロジェクトネームが自動入力されます。
+        </p>
+      )}
 
       <label className="setup-wizard__label">
-        現場名（工事名）
-        <input
-          type="text"
-          value={projectName}
-          onChange={(event) => {
-            setProjectName(event.target.value);
-            setCheckResult(null);
-          }}
-          placeholder="例：芝原改良工事"
-          disabled={busy || detectedFromStorage}
-        />
-      </label>
-
-      <label className="setup-wizard__label">
-        現場ID（project_id）
+        プロジェクト番号
         <input
           type="text"
           value={projectId}
           onChange={(event) => {
             setProjectId(event.target.value);
             setCheckResult(null);
+            clearFieldError("projectId");
           }}
           placeholder="例：001"
           disabled={busy || projectIdIsLocked}
         />
       </label>
-      {projectIdLocked && (
+      {fieldError("projectId")}
+      {mode === "change" && (initialProjectId ?? "").trim() !== "" && projectId.trim() !== (initialProjectId ?? "").trim() && (
         <p className="setup-wizard__hint">
-          現場IDは一度設定すると変更できません（変更すると、これまでの履歴が別の現場のものとして扱われ表示されなくなります）。
+          プロジェクト番号を変更すると、これまでの履歴は別のプロジェクトのものとして扱われ、一覧に表示されなくなります。
         </p>
       )}
-      {!projectIdLocked && detectedFromStorage && (
+      {mode === "initial" && detectedFromStorage && (
         <p className="setup-wizard__hint">
           この保存先には既に他のパソコンが設定した現場情報が見つかったため、自動的に入力しました。
         </p>
       )}
+
+      <label className="setup-wizard__label">
+        プロジェクト名
+        <input
+          type="text"
+          value={projectName}
+          onChange={(event) => {
+            setProjectName(event.target.value);
+            setCheckResult(null);
+            clearFieldError("projectName");
+          }}
+          placeholder="例：芝原改良工事"
+          disabled={busy || detectedFromStorage}
+        />
+      </label>
+      {fieldError("projectName")}
 
       <label className="setup-wizard__label">
         データ保存先
@@ -191,8 +253,10 @@ export function StorageSetupPanel({
               setSaved(false);
               setMigrationAcked(false);
               setDetectedFromStorage(false);
+              clearFieldError("path");
+              syncStorageTypeWithPath(event.target.value);
             }}
-            placeholder="例：C:\\KYデータ　または　\\\\NAS\\共有\\現場安全\\データ"
+            placeholder="例：C:\KY安全管理\001_芝原改良工事\data　または　\\NAS\共有\KY安全管理\data"
             disabled={busy}
           />
           <button type="button" className="compact" onClick={() => void handleBrowse()} disabled={busy}>
@@ -200,6 +264,7 @@ export function StorageSetupPanel({
           </button>
         </div>
       </label>
+      {fieldError("path")}
 
       {browseUnavailable && (
         <p className="setup-wizard__hint">
@@ -267,6 +332,23 @@ export function StorageSetupPanel({
         </div>
       )}
 
+      <label className="setup-wizard__label">
+        保存先種別
+        <select
+          value={storageType}
+          onChange={(event) => {
+            setStorageType(event.target.value as StorageType);
+            setStorageTypeTouched(true);
+            clearFieldError("storageType");
+          }}
+          disabled={busy}
+        >
+          <option value="local">ローカル（このPC内・外付けドライブ等）</option>
+          <option value="nas">社内NAS（共有フォルダ）</option>
+        </select>
+      </label>
+      {fieldError("storageType")}
+
       {isChangingDataRoot && (
         <div className="setup-wizard__status setup-wizard__status--ng" role="alert">
           <p>
@@ -296,13 +378,8 @@ export function StorageSetupPanel({
           {isChecking ? "確認中..." : "接続を確認"}
         </button>
         <button type="button" className="nav-button is-active" onClick={() => void handleSave()} disabled={!canSave}>
-          {isSaving ? "保存中..." : "この内容で保存する"}
+          {isSaving ? "設定中..." : mode === "initial" ? "設定して開始" : "設定を保存"}
         </button>
-        {mode === "change" && onCancel && (
-          <button type="button" className="compact" onClick={onCancel} disabled={busy}>
-            戻る
-          </button>
-        )}
       </div>
     </div>
   );

@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchSetupStatus, type SetupStatus } from "../lib/storageSetupApi";
 import { StorageSetupPanel } from "./StorageSetupPanel";
 
-type SettingsViewProps = {
-  onBack: () => void;
-};
-
-export function SettingsView({ onBack }: SettingsViewProps) {
+export function SettingsView() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -40,8 +36,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
           initialDataRoot={status?.dataRoot ?? null}
           initialProjectId={status?.projectId ?? null}
           initialProjectName={status?.projectName ?? null}
-          projectIdLocked={status?.projectIdLocked ?? false}
-          onCancel={onBack}
+          initialStorageType={status?.storageType ?? null}
         />
       )}
     </div>

@@ -36,7 +36,7 @@ def _load_project_config(path: Path) -> dict:
     """config.jsonを読み込み、具体的な理由が分かる日本語メッセージで検証する。
 
     data_root はNAS(UNCパス)・ローカルフォルダのどちらも許容する。
-    任意で storage_type ("local" | "network") を書けるが、
+    任意で storage_type ("local" | "nas"、旧表記"network"も可) を書けるが、
     保存先の種類はdata_rootの形から自動判定するため未指定でもよい
     (既存のconfig.jsonとの後方互換のため)。
 
@@ -65,10 +65,11 @@ def _load_project_config(path: Path) -> dict:
         ) from None
     if not isinstance(data, dict):
         raise RuntimeError("config.jsonの内容が正しくありません。project_id・project_name・data_rootを持つオブジェクト形式にしてください。") from None
-    allowed_keys = {"project_id", "project_name", "data_root", "storage_type"}
-    unknown = set(data) - allowed_keys
-    if unknown:
-        raise RuntimeError(f"config.jsonに不明な項目があります: {', '.join(sorted(unknown))}") from None
+    # 将来追加される別の設定項目は無視して読み込む(設定画面は未知の項目を保持したまま保存する)。
+    if "setup_completed" in data and not isinstance(data["setup_completed"], bool):
+        raise RuntimeError("config.jsonのsetup_completedはtrueまたはfalseで指定してください。") from None
+    # 項目なし(過去バージョンのconfig.json)は設定済みとみなす。明示的にfalseの場合のみ未完了。
+    data["setup_completed"] = data.get("setup_completed", True)
     for key in ("project_id", "project_name", "data_root", "storage_type"):
         if key in data and not isinstance(data[key], str):
             raise RuntimeError(f"config.jsonの{key}は文字列で指定してください。") from None
@@ -84,8 +85,10 @@ def _load_project_config(path: Path) -> dict:
                 "ローカルフォルダの例: \"C:\\\\KYデータ\"　／　NASの例: \"\\\\\\\\サーバー名\\\\共有名\\\\フォルダ\""
             ) from None
     storage_type = data["storage_type"].lower()
-    if storage_type and storage_type not in ("local", "network"):
-        raise RuntimeError(f"config.jsonのstorage_typeはlocalまたはnetworkを指定してください（現在の値: {storage_type}）。") from None
+    if storage_type == "network":  # 旧バージョンの表記
+        storage_type = "nas"
+    if storage_type and storage_type not in ("local", "nas"):
+        raise RuntimeError(f"config.jsonのstorage_typeはlocalまたはnasを指定してください（現在の値: {storage_type}）。") from None
     data["storage_type"] = storage_type
     return data
 
@@ -105,7 +108,7 @@ if CONFIG_FILE.is_file():
         SETUP_CONFIG_ERROR = str(exc)
         _PROJECT_RAW = {}
 
-DATA_ROOT_CONFIGURED = bool(_PROJECT_RAW.get("data_root"))
+DATA_ROOT_CONFIGURED = bool(_PROJECT_RAW.get("data_root")) and _PROJECT_RAW.get("setup_completed", True) is not False
 # 開発時(.envのみでの起動)は従来どおり初期設定画面を出さない。exe化(frozen)時、
 # またはテスト等でKY_CONFIG_FILEを明示指定した場合のみ初期設定フローの対象とする。
 SETUP_REQUIRED = not DATA_ROOT_CONFIGURED and (getattr(sys, "frozen", False) or "KY_CONFIG_FILE" in os.environ)

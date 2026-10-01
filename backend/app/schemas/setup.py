@@ -23,9 +23,10 @@ class SetupStatusResponse(BaseModel):
 
 class DataRootRequest(BaseModel):
   path: str
-  # project_idは初回(未設定)の場合のみ有効。既に設定済みの場合はサーバー側で無視される。
   project_id: str | None = None
   project_name: str | None = None
+  # "local" | "nas"。未指定の場合はdata_rootの形から自動判定する。
+  storage_type: str | None = None
 
 
 class DataRootCheckResponse(BaseModel):

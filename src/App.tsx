@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AppNavigation, type AppPage } from "./components/AppNavigation";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { DevicePreviewFrame } from "./components/DevicePreviewFrame";
 import { Header } from "./components/Header";
@@ -9,7 +10,7 @@ import { SettingsView } from "./components/SettingsView";
 import { SetupWizard } from "./components/SetupWizard";
 import { StorageUnavailableScreen } from "./components/StorageUnavailableScreen";
 import { EXCEL_ENDPOINT, PDF_ENDPOINT } from "./constants/endpoints";
-import { fetchSetupStatus, type SetupStatus } from "./lib/storageSetupApi";
+import { BACKEND_UNREACHABLE_MESSAGE, fetchSetupStatus, type SetupStatus } from "./lib/storageSetupApi";
 import { useGeminiSafetyAnalysis } from "./hooks/useGeminiSafetyAnalysis";
 import { buildPrintableBodyHtml } from "./utils/buildPrintableBodyHtml";
 import { formatDisplayTimestamp, formatFileTimestamp } from "./utils/formatTimestamp";
@@ -71,19 +72,48 @@ type ReportExportData = {
   createdBy: string;
 };
 
+const HASH_BY_PAGE: Record<AppPage, string> = { create: "#/", history: "#/history", settings: "#/settings" };
+
+const pageFromHash = (): AppPage => {
+  if (window.location.hash === HASH_BY_PAGE.history) return "history";
+  if (window.location.hash === HASH_BY_PAGE.settings) return "settings";
+  return "create";
+};
+
 function App() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState<ResultTabKey>("overview");
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingExcel, setIsSavingExcel] = useState(false);
-  const [page, setPage] = useState<"create" | "history" | "settings">("create");
+  const [page, setPage] = useState<AppPage>(pageFromHash);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  useEffect(() => {
+    const onPopState = (): void => {
+      const next = pageFromHash();
+      // 設定画面を離れるときは保存先の状態を再取得する
+      if (pageRef.current === "settings" && next !== "settings") refreshStorageStatus();
+      setPage(next);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const navigate = (next: AppPage): void => {
+    if (next === page) return;
+    window.history.pushState(null, "", HASH_BY_PAGE[next]);
+    if (page === "settings") refreshStorageStatus();
+    setPage(next);
+  };
   const [siteName, setSiteName] = useState("");
   const [storageStatus, setStorageStatus] = useState<SetupStatus | null>(null);
+  const [backendError, setBackendError] = useState<string | null>(null);
   const refreshStorageStatus = (): void => {
     setStorageStatus(null);
+    setBackendError(null);
+    // 通信失敗を「未設定」と取り違えて初回セットアップ画面を出さない(出すと以降の操作が全て通信失敗になる)。
     void fetchSetupStatus()
       .then(setStorageStatus)
-      .catch(() => setStorageStatus({ configured: false, dataRoot: null, storageType: null, reachable: false, reachableMessage: null, projectId: null, projectName: null, projectIdLocked: false }));
+      .catch((error: unknown) => setBackendError(error instanceof Error ? error.message : BACKEND_UNREACHABLE_MESSAGE));
   };
   useEffect(refreshStorageStatus, []);
   const storageReady = storageStatus?.configured && storageStatus.reachable;
@@ -98,7 +128,6 @@ function App() {
     pendingSave, retrySave,
     isAnalyzing,
     analysisMarkdown,
-    analysisHistory,
     activeHistoryId,
     activeHistoryEntry,
     errorMessage,
@@ -235,6 +264,24 @@ function App() {
     showHistoryEntry(entry);
   };
 
+  if (backendError !== null) {
+    return (
+      <div className="app-shell">
+        <Header />
+        <main className="app-main">
+          <div className="setup-wizard__card" role="alert">
+            <h2 className="panel-title">アプリ内部と通信できません</h2>
+            <p>{backendError}</p>
+            <p>アプリを一度終了して起動し直してください。古いブラウザのタブを開いたままの場合は、そのタブを閉じて、新しく開いたウィンドウを使ってください。</p>
+            <div className="page-actions">
+              <button type="button" className="nav-button is-active" onClick={refreshStorageStatus}>再試行</button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (storageStatus === null) {
     return <div className="app-shell"><Header /><main className="app-main"><p>読み込み中...</p></main></div>;
   }
@@ -248,17 +295,33 @@ function App() {
       <StorageUnavailableScreen
         message={storageStatus.reachableMessage}
         onRetry={refreshStorageStatus}
-        onChangeStorage={() => setPage("settings")}
+        onChangeStorage={() => navigate("settings")}
       />
     );
   }
 
   if (page === "history") {
-    return <div className="app-shell"><Header /><HistoryView onOpenKy={() => setPage("create")} onSelect={handleSelectHistory} onSaveAsPdf={generatePdf} onSaveAsExcel={generateExcel} isSavingPdf={isSavingPdf} isSavingExcel={isSavingExcel} /></div>;
+    return (
+      <div className="app-shell">
+        <Header />
+        <main className="app-main">
+          <AppNavigation activePage="history" onNavigate={navigate} />
+          <HistoryView onOpenKy={() => navigate("create")} onSelect={handleSelectHistory} onSaveAsPdf={generatePdf} onSaveAsExcel={generateExcel} isSavingPdf={isSavingPdf} isSavingExcel={isSavingExcel} />
+        </main>
+      </div>
+    );
   }
 
   if (page === "settings") {
-    return <div className="app-shell"><Header /><main className="app-main"><SettingsView onBack={() => { setPage("create"); refreshStorageStatus(); }} /></main></div>;
+    return (
+      <div className="app-shell">
+        <Header />
+        <main className="app-main">
+          <AppNavigation activePage="settings" onNavigate={navigate} />
+          <SettingsView />
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -266,11 +329,7 @@ function App() {
       <Header />
 
       <main className="app-main">
-        <nav className="app-navigation" aria-label="メインメニュー">
-          <button type="button" className="nav-button is-active">KY作成</button>
-          <button type="button" className="nav-button" onClick={() => setPage("history")}>履歴</button>
-          <button type="button" className="nav-button" onClick={() => setPage("settings")}>設定</button>
-        </nav>
+        <AppNavigation activePage="create" onNavigate={navigate} />
 
         {pendingSave && !isAnalyzing && <div role="alert"><p>分析結果はまだ保存されていません。NAS復旧後、先に履歴で保存済みか確認してください。</p><button onClick={() => void retrySave()}>分析結果の保存を再試行</button></div>}
         <div className="main-grid">
@@ -303,12 +362,6 @@ function App() {
                 onTabChange={setActiveTab}
                 isAnalyzing={isAnalyzing}
                 analysisMarkdown={analysisMarkdown}
-                analysisHistory={analysisHistory}
-                activeHistoryId={activeHistoryId}
-                onSelectHistory={(historyId) => {
-                  const entry = analysisHistory.find((item) => item.id === historyId);
-                  if (entry) handleSelectHistory(entry);
-                }}
                 errorMessage={errorMessage}
                 canSaveAsPdf={canSavePdf}
                 isSavingPdf={isSavingPdf}

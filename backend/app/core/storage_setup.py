@@ -19,11 +19,15 @@ from backend.app.core.shared_storage import HistoryStorageUnavailable, check_wri
 
 logger = logging.getLogger("genba_safety_rag_app.storage_setup")
 
-CONNECTION_OK_MESSAGE = "保存先への接続を確認しました。"
-CONNECTION_NG_MESSAGE = "保存先にアクセスできません。ネットワーク接続またはフォルダのアクセス権を確認してください。"
+CONNECTION_OK_MESSAGE = "保存先に接続できました。"
+CONNECTION_NG_MESSAGE = "保存先にアクセスできません。パスまたはネットワーク接続を確認してください。"
 
+STORAGE_TYPES = ("local", "nas")
+
+DEFAULT_PROJECT_NAME = "現場"
 PROJECT_ID_MAX_LEN = 50
 PROJECT_NAME_MAX_LEN = 200
+PROJECT_ID_FORBIDDEN_CHARS = '\\/:*?"<>|'
 
 # この空き容量を下回ったら注意喚起する(写真等の保存が失敗し始める前に気づけるように)。
 LOW_SPACE_WARNING_BYTES = 5 * 1024 ** 3  # 5GB
@@ -50,6 +54,11 @@ def validate_project_id(raw: str) -> tuple[bool, str]:
         return False, "現場ID（project_id）を入力してください。"
     if len(text) > PROJECT_ID_MAX_LEN:
         return False, f"現場ID（project_id）は{PROJECT_ID_MAX_LEN}文字以内で入力してください。"
+    if any(ord(ch) < 32 or ch in PROJECT_ID_FORBIDDEN_CHARS for ch in text):
+        return False, (
+            "現場ID（project_id）に使えない文字が含まれています。"
+            f"{' '.join(PROJECT_ID_FORBIDDEN_CHARS)} や改行を除いた、英数字・日本語・ハイフン等で入力してください（例: 001）。"
+        )
     return True, ""
 
 
@@ -59,6 +68,20 @@ def validate_project_name(raw: str) -> tuple[bool, str]:
         return False, "現場名（工事名）を入力してください。"
     if len(text) > PROJECT_NAME_MAX_LEN:
         return False, f"現場名（工事名）は{PROJECT_NAME_MAX_LEN}文字以内で入力してください。"
+    return True, ""
+
+
+def normalize_storage_type(raw: str | None) -> str:
+    """保存先種別を正規化する。旧バージョンの"network"は"nas"として扱う。未指定・不正は空文字。"""
+    value = str(raw or "").strip().lower()
+    if value == "network":
+        value = "nas"
+    return value if value in STORAGE_TYPES else ""
+
+
+def validate_storage_type(raw: str | None) -> tuple[bool, str]:
+    if not normalize_storage_type(raw):
+        return False, "保存先種別は「ローカル」または「社内NAS」から選択してください。"
     return True, ""
 
 
@@ -80,11 +103,42 @@ def normalize_path(raw: str) -> Path:
     return Path(raw.strip().rstrip("\\/"))
 
 
-def validate_data_root(raw_path: str) -> tuple[bool, str]:
+PERMISSION_NG_MESSAGE = "保存先に書き込む権限がありません。"
+NETWORK_NG_MESSAGE = "保存先に接続できません。ネットワークまたはNASの状態を確認してください。"
+
+
+def _ensure_directory(path: Path) -> None:
+    """保存先フォルダが無ければ親フォルダごと作成する。失敗時は原因別のメッセージで例外にする。
+
+    UNCパスは共有名(\\サーバー\共有)自体が存在しない場合に作成を試みない
+    (NAS未接続・共有名の誤りを、誤ったフォルダの自動作成で隠さないため)。
+    """
+    if path.is_dir():
+        return
+    network = _is_network_path(path)
+    share = _unc_share_root(path)
+    if share and not Path(share).is_dir():
+        raise HistoryStorageUnavailable(NETWORK_NG_MESSAGE)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        raise HistoryStorageUnavailable(PERMISSION_NG_MESSAGE) from None
+    except OSError as exc:
+        if network:
+            raise HistoryStorageUnavailable(NETWORK_NG_MESSAGE) from None
+        raise HistoryStorageUnavailable(
+            f"保存先フォルダを作成できません。ドライブ名・パスを確認してください。詳細: {exc.strerror or exc}"
+        ) from None
+
+
+def validate_data_root(raw_path: str, create_missing: bool = False) -> tuple[bool, str]:
     """保存先候補を検証する。
 
     戻り値: (成功したか, 利用者向け日本語メッセージ)
     確認内容: フォルダの存在・読み取り可否・書き込み(テストファイル作成/削除)可否。
+    create_missing=True の場合、存在しないフォルダは親フォルダごと作成してから確認する
+    (利用者が明示的に「確認」「設定」を実行したときのみ。起動時の到達確認では作成しない)。
+    原因別メッセージ: 権限なし / NAS未接続 / その他(パス誤り等)を区別する。
     """
     text = (raw_path or "").strip()
     if not text:
@@ -93,10 +147,19 @@ def validate_data_root(raw_path: str) -> tuple[bool, str]:
     if not path.is_absolute():
         return False, "データ保存先は絶対パスで指定してください（例: C:\\KYデータ　または　\\\\NAS\\共有\\フォルダ）。"
     try:
+        if create_missing:
+            _ensure_directory(path)
         require_root(path)
         check_writable(path)
     except HistoryStorageUnavailable as exc:
-        return False, f"{CONNECTION_NG_MESSAGE}\n詳細: {exc}"
+        detail = str(exc)
+        if detail in (PERMISSION_NG_MESSAGE, NETWORK_NG_MESSAGE) or detail.startswith("保存先フォルダを作成できません"):
+            return False, detail
+        if "権限がありません" in detail:
+            return False, f"{PERMISSION_NG_MESSAGE}\n詳細: {detail}"
+        if _is_network_path(path):
+            return False, f"{NETWORK_NG_MESSAGE}\n詳細: {detail}"
+        return False, f"{CONNECTION_NG_MESSAGE}\n詳細: {detail}"
     return True, CONNECTION_OK_MESSAGE + _free_space_note(path)
 
 
@@ -116,29 +179,46 @@ def save_data_root(
     raw_path: str,
     project_id: str | None = None,
     project_name: str | None = None,
+    storage_type: str | None = None,
 ) -> tuple[str, str]:
-    """data_root(・project_name)を更新する。戻り値は実際に書き込まれた(project_id, project_name)。
+    """config.jsonの project_id / project_name / data_root / storage_type を更新する。
 
-    project_idは一度設定されたら変更しない(既存履歴が別IDとして扱われ
-    表示されなくなるのを防ぐため)。未設定の場合のみ引数の値、それも
-    無ければ既定値"001"を補う。project_nameはいつでも変更可能。
+    既存のconfig.jsonを読み込み、対象の項目だけを書き換える(将来追加された
+    別の項目は削除しない)。引数が空の項目は既存値、それも無ければ既定値を使う。
+    storage_typeが未指定/不正な場合は data_root の形から自動判定する。
+    戻り値は実際に書き込まれた(project_id, project_name)。
     """
     path = normalize_path(raw_path)
     current = read_raw_config(config_file)
-    existing_project_id = str(current.get("project_id") or "").strip()
-    project_id = existing_project_id or (str(project_id or "").strip()) or "001"
+    project_id = (str(project_id or "").strip()
+                  or str(current.get("project_id") or "").strip()
+                  or "001")
     project_name = (str(project_name or "").strip()
                      or str(current.get("project_name") or "").strip()
-                     or "現場")
-    storage_type = "network" if _is_network_path(path) else "local"
-    payload = {
+                     or DEFAULT_PROJECT_NAME)
+    storage_type = normalize_storage_type(storage_type) or ("nas" if _is_network_path(path) else "local")
+    payload = dict(current)
+    payload.update({
         "project_id": project_id,
         "project_name": project_name,
         "data_root": str(path),
         "storage_type": storage_type,
-    }
+        # 全ての初期化が終わった後にだけ書かれる「セットアップ完了」印。
+        # 過去バージョンのconfig.jsonにはこの項目が無いため、読み込み側は
+        # 「項目なし=完了済み」として扱う(後方互換)。
+        "setup_completed": True,
+    })
     config_file.parent.mkdir(parents=True, exist_ok=True)
-    config_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8-sig")
+    # 書き込み途中で失敗/中断しても既存のconfig.jsonを壊さないよう、一時ファイル経由で置き換える。
+    temp = config_file.with_name(f".{uuid.uuid4().hex}.config.tmp")
+    try:
+        temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8-sig")
+        os.replace(temp, config_file)
+    finally:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
     return project_id, project_name
 
 
@@ -169,7 +249,11 @@ def read_site_marker(root: Path) -> dict[str, str] | None:
     project_id = str(data.get("project_id") or "").strip()
     if not project_id:
         return None
-    return {"project_id": project_id, "project_name": str(data.get("project_name") or "").strip()}
+    project_name = str(data.get("project_name") or "").strip()
+    if project_name == DEFAULT_PROJECT_NAME:
+        # 現場名未入力のときの仮の既定値。利用者が入力した正式な現場名を上書きさせない。
+        project_name = ""
+    return {"project_id": project_id, "project_name": project_name}
 
 
 def write_site_marker(root: Path, project_id: str, project_name: str) -> None:
@@ -191,6 +275,85 @@ def write_site_marker(root: Path, project_id: str, project_name: str) -> None:
             temp.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def apply_setup(
+    config_file: Path,
+    raw_path: str,
+    project_id: str | None,
+    project_name: str | None,
+    storage_type: str | None = None,
+) -> tuple[bool, str]:
+    """初回セットアップ・設定画面からの変更の両方で使う共通の保存処理。
+
+    順序: 入力検証 → 保存先の確認 → 既存の現場情報との照合 → サブフォルダ/履歴保存領域の
+    初期化(HistoryRepository.initialize_schemaを再利用) → config.json保存(完了フラグ付き)
+    → 現場情報マーカー書き込み。config.jsonは最後にアトミックに書くため、途中で失敗しても
+    「セットアップ完了」状態にはならず、既存の設定も壊れない。
+    戻り値: (成功したか, 利用者向け日本語メッセージ)
+    """
+    from backend.app.repositories.history_repository import HistoryRepository
+
+    raw = read_raw_config(config_file)
+    local_project_id = str(raw.get("project_id") or "").strip()
+    previous_root = str(raw.get("data_root") or "").strip()
+
+    ok, message = validate_project_name(project_name or "")
+    if not ok:
+        return False, message
+    # 設定画面からはproject_idも変更できる。未入力の場合のみ既存値を引き継ぐ。
+    requested_id = (project_id or "").strip() or local_project_id
+    ok, message = validate_project_id(requested_id)
+    if not ok:
+        return False, message
+    if storage_type:
+        ok, message = validate_storage_type(storage_type)
+        if not ok:
+            return False, message
+
+    ok, message = validate_data_root(raw_path, create_missing=True)
+    if not ok:
+        return False, message
+
+    target = normalize_path(raw_path)
+    same_root_as_current = bool(previous_root) and normalize_path(previous_root) == target
+    marker = read_site_marker(target)
+    detected_note = ""
+    project_id = requested_id
+    if marker:
+        if local_project_id and not same_root_as_current and marker["project_id"] != requested_id:
+            return False, (
+                f"この保存先には既に別の現場（現場ID: {marker['project_id']}、"
+                f"現場名: {marker['project_name'] or '不明'}）のデータがあります。"
+                f"入力された現場ID（{requested_id}）と一致しません。"
+                "保存先のフォルダを間違えていないかご確認ください。"
+            )
+        if not local_project_id:
+            # 初回設定時は、手入力の値より保存先に既にある現場情報を優先する
+            # (複数PCで現場ID・現場名がずれるのを防ぐため)。
+            project_id = marker["project_id"]
+            project_name = marker["project_name"] or project_name
+            detected_note = (
+                f"\n\nこの保存先の既存の現場情報（現場ID: {project_id}、"
+                f"現場名: {project_name}）を使用しました。"
+            )
+
+    effective_id = str(project_id or "").strip() or "001"
+    try:
+        HistoryRepository(root=target, project_id=effective_id).initialize_schema()
+    except HistoryStorageUnavailable as exc:
+        return False, f"保存先に必要なフォルダを作成できませんでした。設定は保存していません。\n詳細: {exc}"
+
+    try:
+        final_id, final_name = save_data_root(config_file, raw_path, project_id, project_name, storage_type)
+    except OSError as exc:
+        logger.warning("config.json の保存に失敗しました: %s", exc)
+        return False, (
+            f"設定ファイル（{config_file}）を保存できませんでした。アプリのフォルダへの書き込み権限と"
+            f"空き容量を確認してください。設定は変更されていません。詳細: {exc}"
+        )
+    write_site_marker(target, final_id, final_name)
+    return True, message + detected_note
 
 
 def _unc_share_root(path: Path) -> str | None:

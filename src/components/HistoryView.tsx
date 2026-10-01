@@ -60,8 +60,7 @@ export function HistoryView({ onOpenKy, onSelect, onSaveAsPdf, onSaveAsExcel, is
     if (!selected || !window.confirm("この履歴を削除しますか？ 写真は履歴から非表示になります。")) return;
     try { await deleteAnalysisHistory(selected.id); setSelected(null); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "削除できませんでした。"); }
   };
-  return <main className="app-main history-page">
-    <div className="page-actions"><button type="button" className="secondary-button compact" onClick={onOpenKy}>KY作成へ戻る</button></div>
+  return <div className="history-page">
     <section className="history-filters"><h2>履歴</h2><p>検索ボタンで他のPCの保存結果を取得できます。破損・未対応形式の履歴は表示されません。</p><div className="filter-grid">
       <label>開始日<input type="date" value={filters.dateFrom ?? ""} onChange={(e) => update("dateFrom", e.target.value)} /></label>
       <label>終了日<input type="date" value={filters.dateTo ?? ""} onChange={(e) => update("dateTo", e.target.value)} /></label>
@@ -79,5 +78,5 @@ export function HistoryView({ onOpenKy, onSelect, onSaveAsPdf, onSaveAsExcel, is
       <div>{reports.map(report => <p key={report.name}><a href={report.url} target="_blank" rel="noreferrer">保存済み{report.name.toLowerCase().endsWith(".xlsx") ? "Excel" : "PDF"}：{report.name}</a></p>)}</div>
       <img className="history-detail__image" src={selected.imageUrl} alt={selected.imageName} /><dl><dt>解析日時</dt><dd>{formatDate(selected.createdAt)}</dd><dt>現場名</dt><dd>{selected.siteName || "－"}</dd><dt>作業内容</dt><dd>{selected.workContent || "－"}</dd><dt>抽出された危険</dt><dd>{selected.mainRisk || "－"}</dd><dt>登録者</dt><dd>{selected.createdBy}</dd></dl><h3>解析結果（想定される災害・安全対策・KY活動内容）</h3><HtmlReport html={renderMarkdownToHtml(selected.markdown)} />
     </section>}
-  </main>;
+  </div>;
 }

@@ -5,7 +5,7 @@ import type { AnalysisHistoryEntry } from "../types/analysis";
 import { isSafetyAnalysisError } from "../types/analysis";
 import { fileToBase64, getImageMimeType } from "../utils/imageFile";
 
-type KyMetadata = { siteName: string; workContent: string; mainRisk: string };
+type KyMetadata = { siteName: string; workContent: string; mainRisk: string; createdBy: string };
 const AI_MODE = "vertex";
 const AI_PROVIDER_LABEL = "AI解析";
 

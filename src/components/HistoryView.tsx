@@ -66,12 +66,12 @@ export function HistoryView({ onOpenKy, onSelect, onSaveAsPdf, onSaveAsExcel, is
       <label>終了日<input type="date" value={filters.dateTo ?? ""} onChange={(e) => update("dateTo", e.target.value)} /></label>
       <label>現場名<input value={filters.siteName ?? ""} onChange={(e) => update("siteName", e.target.value)} /></label>
       <label>作業内容<input value={filters.workContent ?? ""} onChange={(e) => update("workContent", e.target.value)} /></label>
-      <label>登録者<input value={filters.createdBy ?? ""} onChange={(e) => update("createdBy", e.target.value)} /></label>
       <label>キーワード<input value={filters.keyword ?? ""} onChange={(e) => update("keyword", e.target.value)} /></label>
-    </div><button type="button" className="analyze-button compact history-search-button" onClick={() => void load()}>検索</button></section>
+      <button type="button" className="analyze-button compact history-search-button" onClick={() => void load()}>検索</button>
+    </div></section>
     {message && <p className="history-message" role="alert">{message}</p>}
     <section className="history-table-wrap"><table className="history-table"><thead><tr><th>日時</th><th>写真</th><th>現場名</th><th>作業内容</th><th>主な危険</th><th>登録者</th></tr></thead><tbody>
-      {entries.map((entry) => <tr key={entry.id} onClick={() => setSelected(entry)}><td>{formatDate(entry.createdAt)}</td><td>{entry.imageUrl && <img loading="lazy" src={entry.imageUrl} alt="写真なし" />}</td><td>{entry.siteName}</td><td>{entry.workContent}</td><td>{entry.mainRisk}</td><td>{entry.createdBy}</td></tr>)}
+      {entries.map((entry) => <tr key={entry.id} className={selected?.id === entry.id ? "is-selected" : undefined} onClick={() => setSelected(entry)}><td>{formatDate(entry.createdAt)}</td><td>{entry.imageUrl && <img loading="lazy" src={entry.imageUrl} alt="写真なし" />}</td><td>{entry.siteName}</td><td>{entry.workContent}</td><td>{entry.mainRisk}</td><td>{entry.createdBy}</td></tr>)}
       {!entries.length && <tr><td colSpan={6}>該当する履歴はありません。</td></tr>}</tbody></table></section>
     <div className="page-actions"><button disabled={offset === 0} onClick={() => void load(filters, Math.max(0, offset - 50))}>前の50件</button><span>{offset + 1}件目から表示</span><button disabled={entries.length < 50} onClick={() => void load(filters, offset + 50)}>次の50件</button></div>
     {selected && <section className="history-detail"><div className="detail-actions"><h2>履歴詳細</h2><button type="button" onClick={() => void saveSelectedAsPdf()} disabled={isSavingPdf}>{isSavingPdf ? "PDF出力準備中..." : "PDFとして保存"}</button><button type="button" onClick={() => void saveSelectedAsExcel()} disabled={isSavingExcel}>{isSavingExcel ? "Excel出力準備中..." : "Excelとして保存"}</button><button type="button" className="secondary-button compact" onClick={() => { onSelect(selected); onOpenKy(); }}>KY作成画面で再表示</button><button type="button" className="delete-button" onClick={() => void remove()}>削除</button></div>

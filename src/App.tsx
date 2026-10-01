@@ -10,6 +10,7 @@ import { SettingsView } from "./components/SettingsView";
 import { SetupWizard } from "./components/SetupWizard";
 import { StorageUnavailableScreen } from "./components/StorageUnavailableScreen";
 import { EXCEL_ENDPOINT, PDF_ENDPOINT } from "./constants/endpoints";
+import { fetchLastRegistrant, saveLastRegistrant } from "./lib/analysisHistoryApi";
 import { BACKEND_UNREACHABLE_MESSAGE, fetchSetupStatus, type SetupStatus } from "./lib/storageSetupApi";
 import { useGeminiSafetyAnalysis } from "./hooks/useGeminiSafetyAnalysis";
 import { buildPrintableBodyHtml } from "./utils/buildPrintableBodyHtml";
@@ -122,6 +123,10 @@ function App() {
       void fetch("/api/v1/project").then(r => r.json()).then(p => setSiteName(p.project_name)).catch(() => {});
     }
   }, [storageReady]);
+  const [createdBy, setCreatedBy] = useState("");
+  useEffect(() => {
+    void fetchLastRegistrant().then(name => setCreatedBy(current => current || name)).catch(() => {});
+  }, []);
   const [workContent, setWorkContent] = useState("");
   const [mainRisk, setMainRisk] = useState("");
   const {
@@ -338,7 +343,10 @@ function App() {
 
             <section className="upload-panel metadata-panel">
               <h2 className="panel-title">2. 記録情報</h2>
-              <label>現場名<input value={siteName} onChange={(event) => setSiteName(event.target.value)} placeholder="例：芝原" /></label>
+              <div className="metadata-row">
+                <label>現場名<input value={siteName} onChange={(event) => setSiteName(event.target.value)} placeholder="例：芝原" /></label>
+                <label>登録者名<input value={createdBy} onChange={(event) => setCreatedBy(event.target.value)} placeholder="例：山田" maxLength={255} /></label>
+              </div>
               <label>作業内容<input value={workContent} onChange={(event) => setWorkContent(event.target.value)} placeholder="例：掘削" /></label>
               <label>主な危険<input value={mainRisk} onChange={(event) => setMainRisk(event.target.value)} placeholder="例：重機接触" /></label>
             </section>
@@ -346,7 +354,8 @@ function App() {
             <AnalysisPanel
               isAnalyzing={isAnalyzing}
               onAnalyze={() => {
-                void analyzeSelectedImage(selectedImage, { siteName, workContent, mainRisk });
+                if (createdBy.trim()) saveLastRegistrant(createdBy.trim());
+                void analyzeSelectedImage(selectedImage, { siteName, workContent, mainRisk, createdBy: createdBy.trim() });
               }}
             />
           </section>

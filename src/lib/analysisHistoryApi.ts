@@ -2,7 +2,18 @@ import { HISTORY_ENDPOINT } from "../constants/endpoints";
 import type { AnalysisHistoryEntry } from "../types/analysis";
 
 export type HistoryFilters = { dateFrom?: string; dateTo?: string; siteName?: string; workContent?: string; createdBy?: string; keyword?: string };
-export type CreateHistoryInput = { imageName: string; imageMimeType: string; imageBase64: string; mode: string; providerDisplayLabel: string; model: string; markdown: string; siteName: string; workContent: string; mainRisk: string };
+export type CreateHistoryInput = { imageName: string; imageMimeType: string; imageBase64: string; mode: string; providerDisplayLabel: string; model: string; markdown: string; siteName: string; workContent: string; mainRisk: string; createdBy: string };
+
+export const fetchLastRegistrant = async (): Promise<string> => {
+  const response = await fetch("/api/v1/settings/last-registrant");
+  if (!response.ok) return "";
+  const data: unknown = await response.json();
+  return data && typeof data === "object" && "name" in data && typeof data.name === "string" ? data.name : "";
+};
+
+export const saveLastRegistrant = (name: string): void => {
+  void fetch("/api/v1/settings/last-registrant", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).catch(() => {});
+};
 
 const readError = async (response: Response): Promise<string> => {
   try { const data: unknown = await response.json(); if (data && typeof data === "object" && "detail" in data && typeof data.detail === "string") return data.detail; } catch { /* not JSON */ }

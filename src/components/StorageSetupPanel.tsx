@@ -201,6 +201,11 @@ export function StorageSetupPanel({
       <p className="panel-description">
         危険分析の履歴・写真・PDF・Excelを保存する場所を選びます。パソコン内のフォルダ、または社内NASの共有フォルダ（例：{"\\\\NAS\\共有\\現場安全\\データ"}）のどちらも指定できます。空のフォルダでも、必要なフォルダは自動で作成されます。
       </p>
+      {mode === "change" && (
+        <p className="setup-wizard__help setup-wizard__help--section">
+          変更する項目を入力し、内容を確認してから保存してください。
+        </p>
+      )}
       {mode === "initial" && (
         <p className="setup-wizard__hint">
           「参照...」でフォルダを選び、プロジェクト番号とプロジェクトネームを入力して「設定して開始」を押してください。
@@ -221,6 +226,7 @@ export function StorageSetupPanel({
           placeholder="例：001"
           disabled={busy || projectIdIsLocked}
         />
+        <span className="setup-wizard__help">保存フォルダ名などに使用する工事番号を入力してください。例：003</span>
       </label>
       {fieldError("projectId")}
       {mode === "change" && (initialProjectId ?? "").trim() !== "" && projectId.trim() !== (initialProjectId ?? "").trim() && (
@@ -247,11 +253,12 @@ export function StorageSetupPanel({
           placeholder="例：芝原改良工事"
           disabled={busy || detectedFromStorage}
         />
+        <span className="setup-wizard__help">現場名として表示・保存する工事名称を入力してください。</span>
       </label>
       {fieldError("projectName")}
 
       <label className="setup-wizard__label">
-        データ保存先
+        {mode === "change" ? "新しいデータ保存先" : "データ保存先"}
         <div className="setup-wizard__path-row">
           <input
             type="text"
@@ -272,6 +279,7 @@ export function StorageSetupPanel({
             {isBrowsing ? "選択中..." : "参照..."}
           </button>
         </div>
+        <span className="setup-wizard__help">KY履歴・写真・PDFなどを保存するフォルダを指定してください。</span>
       </label>
       {fieldError("path")}
 
@@ -355,6 +363,7 @@ export function StorageSetupPanel({
           <option value="local">ローカル（このPC内・外付けドライブ等）</option>
           <option value="nas">社内NAS（共有フォルダ）</option>
         </select>
+        <span className="setup-wizard__help">複数PCで同じ履歴を利用する場合は「社内NAS（共有フォルダ）」を選択してください。</span>
       </label>
       {fieldError("storageType")}
 
@@ -390,6 +399,7 @@ export function StorageSetupPanel({
           {isSaving ? "再起動中..." : mode === "initial" ? "設定して開始" : "設定を保存して再起動"}
         </button>
       </div>
+      {mode === "change" && <p className="setup-wizard__help setup-wizard__help--right">変更した設定は再起動後に反映されます。</p>}
     </div>
   );
 }

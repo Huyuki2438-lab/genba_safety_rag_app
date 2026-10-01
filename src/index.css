@@ -98,6 +98,8 @@ body {
 .nav-button.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .compact { width: auto; margin-top: 0; min-height: 42px; }
 .metadata-panel { display: grid; gap: 8px; }
+.metadata-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.metadata-row label, .metadata-row input { min-width: 0; }
 .metadata-panel label, .history-filters label { display: grid; gap: 4px; font-weight: 700; font-size: .9rem; }
 .metadata-panel input, .history-filters input {
   min-height: 40px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font: inherit;
@@ -107,19 +109,35 @@ body {
 .app-navigation { flex-shrink: 0; }
 .history-filters, .history-table-wrap, .history-detail { padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
 .history-filters h2, .history-detail h2 { margin: 0 0 14px; }
-.filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.filter-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px 12px; }
+.history-search-panel .filter-grid > label { grid-column: span 2; }
+.history-search-panel .filter-grid > label:nth-of-type(5) { grid-column: span 3; }
+.history-search-panel .filter-grid > label:nth-of-type(4) { grid-column: span 2; }
+.history-search-panel h2 { margin-bottom: 6px; }
+.history-search-panel p { margin: 0 0 10px; }
+.history-search-panel { padding: 14px 18px; }
 .history-search-panel { width: 100%; max-width: 1360px; align-self: center; }
 .history-search-panel input { width: 100%; min-width: 0; }
 .history-search-panel .history-search-button {
   display: flex;
-  width: 180px;
-  min-height: 42px;
-  margin-left: auto;
-  padding: 8px 20px;
+  grid-column: span 1;
+  align-self: end;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
 }
 .history-message { margin: 0; padding: 12px; border-radius: 10px; background: #fef2f2; color: #991b1b; }
 .history-table-wrap { overflow-x: auto; padding: 0; }
-.history-table { width: 100%; border-collapse: collapse; }
+.history-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.history-table th:nth-child(1) { width: 11%; }
+.history-table th:nth-child(2) { width: 90px; }
+.history-table th:nth-child(3) { width: 16%; }
+.history-table th:nth-child(6) { width: 11%; }
+.history-table td { overflow-wrap: anywhere; word-break: break-word; }
+.history-table td:nth-child(4), .history-table td:nth-child(5) { display: table-cell; }
+.history-table tbody tr.is-selected, .history-table tbody tr.is-selected:hover { background: #e8f0fd; box-shadow: inset 3px 0 0 var(--accent); }
 .history-table th, .history-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
 .history-table th { background: var(--surface-muted); white-space: nowrap; }
 .history-table tbody tr { cursor: pointer; }
@@ -673,6 +691,8 @@ body {
   }
 
   .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .history-search-panel .filter-grid > label, .history-search-panel .filter-grid > label:nth-of-type(n) { grid-column: span 1; }
+  .history-search-panel .filter-grid > .history-search-button { grid-column: 1 / -1; }
 }
 
 @media (max-width: 640px) {
@@ -832,7 +852,8 @@ body {
 
 /* Keep shared history rows visible when the detail grows inside a flex page. */
 .history-page > * { flex-shrink: 0; }
-.history-page .detail-actions { flex-wrap: wrap; }
+.history-page .detail-actions { flex-wrap: wrap; justify-content: flex-end; }
+.history-page .page-actions { justify-content: flex-end; }
 .history-page .detail-actions h2 { margin: 0; flex: 1 0 140px; font-weight: 800; }
 .history-page .detail-actions button { width: auto; flex-shrink: 0; white-space: nowrap; }
 .history-page .page-actions button, .history-page .detail-actions button {
@@ -861,6 +882,12 @@ body {
 }
 .settings-card__summary h2,
 .settings-card__current-path { margin: 0; }
+.settings-card__current-label { display: block; font-size: .8rem; color: var(--text-muted); margin-bottom: 2px; }
+.setup-wizard__help { margin: 0; font-size: .8rem; font-weight: 400; color: var(--text-muted); line-height: 1.4; }
+.settings-card .setup-wizard__label { gap: 4px; }
+.settings-card > .setup-wizard__card { gap: 12px; }
+.setup-wizard__help--section { margin-top: -6px; }
+.setup-wizard__help--right { text-align: right; margin-top: -6px; }
 .settings-card__current-path {
   padding: 9px 11px;
   border-radius: 8px;

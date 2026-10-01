@@ -26,9 +26,10 @@ export function SettingsView() {
         <div className="settings-card__summary">
           <h2>設定</h2>
           <p className="panel-description">現在の保存先とプロジェクト情報を確認・変更できます。</p>
-          <p className="settings-card__current-path">
-            現在の保存先：<strong>{loaded ? status?.dataRoot ?? "未設定" : "読み込み中..."}</strong>
-          </p>
+          <div className="settings-card__current-path">
+            <span className="settings-card__current-label">現在使用中の保存先</span>
+            <strong>{loaded ? status?.dataRoot ?? "未設定" : "読み込み中..."}</strong>
+          </div>
         </div>
 
         {loaded && (

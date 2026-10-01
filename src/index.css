@@ -808,6 +808,7 @@ body {
 .history-page .page-actions button, .history-page .detail-actions button, .app-header button {
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; cursor: pointer; background: white;
 }
+.history-page .page-actions button.is-active, .history-page .detail-actions button.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .history-page button:disabled { opacity: .45; cursor: default; }
 .app-header button { margin-top: 8px; }
 

@@ -27,7 +27,7 @@ export type CheckResult = {
   detectedProjectName?: string | null;
 };
 
-export const BACKEND_UNREACHABLE_MESSAGE = "アプリ内部の通信に失敗しました。バックエンドの起動状態を確認してください。";
+export const BACKEND_UNREACHABLE_MESSAGE = "アプリ本体との通信に失敗しました。アプリが終了している可能性があります。このタブを閉じ、KY安全管理.exeを起動し直してから、もう一度お試しください（保存先のパスの長さが原因ではありません）。";
 
 /** バックエンドAPIへ接続できなかった(接続拒否・サーバー停止・ポート不一致など)ことを表す。 */
 export class BackendUnreachableError extends Error {
@@ -136,6 +136,34 @@ export async function connectNetworkCredentials(path: string, username: string, 
     body: JSON.stringify({ path, username, password })
   });
   return toCheckResult(await asJson<CheckResponseBody>(response));
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const probeBackend = async (): Promise<boolean> => {
+  try {
+    const response = await fetch(SETUP_STATUS_ENDPOINT, { cache: "no-store", signal: AbortSignal.timeout(1500) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * 再起動要求後、旧プロセスの停止 → 新プロセスの起動を順に待つ。
+ * 新プロセスが応答したらtrue、制限時間内に応答しなければfalseを返す。
+ * (旧プロセスはまだ応答する場合があるため、一度停止を確認してから起動を待つ)
+ */
+export async function waitForAppRestart(timeoutMs = 90_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  let sawDown = false;
+  while (Date.now() < deadline) {
+    const alive = await probeBackend();
+    if (!alive) sawDown = true;
+    else if (sawDown) return true;
+    await sleep(400);
+  }
+  return false;
 }
 
 export async function requestAppRestart(): Promise<void> {

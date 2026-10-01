@@ -246,7 +246,10 @@ def main() -> int:
             # reuses the parent's extraction folder. That folder is torn down when
             # this (exiting) process's bootloader cleans up, racing the new
             # process's startup. Drop it so the relaunched exe extracts its own.
-            restart_env = {k: v for k, v in os.environ.items() if not k.upper().startswith("_MEI")}
+            # PyInstaller 6 uses _PYI_* variables too; leaving them makes the child reuse the
+            # parent's extraction folder, which is deleted on exit (the UI then fails with HTTP 500).
+            restart_env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("_MEI", "_PYI"))}
+            restart_env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
             subprocess.Popen([sys.executable, *sys.argv[1:]], close_fds=True, creationflags=creationflags, env=restart_env)
             logger.info("Restarting application to apply new settings.")
             # Give the new process's own onefile extraction a head start before

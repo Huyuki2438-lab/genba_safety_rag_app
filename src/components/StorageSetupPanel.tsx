@@ -6,6 +6,7 @@ import {
   requestAppRestart,
   saveDataRoot,
   validateDataRoot,
+  waitForAppRestart,
   type CheckResult,
   type StorageType
 } from "../lib/storageSetupApi";
@@ -70,6 +71,7 @@ export function StorageSetupPanel({
   const [checkResult, setCheckResult] = useState<CheckResult | null>(null);
   const [browseUnavailable, setBrowseUnavailable] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [restartTimedOut, setRestartTimedOut] = useState(false);
   const [migrationAcked, setMigrationAcked] = useState(false);
   const [detectedFromStorage, setDetectedFromStorage] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
@@ -166,7 +168,11 @@ export function StorageSetupPanel({
       applyCheckResult(result);
       if (result.ok) {
         setSaved(true);
-        void requestAppRestart();
+        void (async () => {
+          await requestAppRestart();
+          if (await waitForAppRestart()) window.location.reload();
+          else setRestartTimedOut(true);
+        })();
       }
     } catch (error) {
       setCheckResult({ ok: false, message: error instanceof Error ? error.message : "保存に失敗しました。" });
@@ -180,8 +186,11 @@ export function StorageSetupPanel({
       <div className="setup-wizard__card" role="status">
         <h2 className="panel-title">設定が完了しました</h2>
         <p>設定を保存しました。設定を反映するため、アプリを再起動しています。</p>
-        <p>自動で再起動されない場合は、設定を反映するためアプリを再起動してください。</p>
-        <p>まもなく新しいウィンドウが自動的に開きます。開いたら、この画面は閉じてください。</p>
+        {restartTimedOut ? (
+          <p>自動で再起動されませんでした。このタブを閉じ、KY安全管理.exeを起動し直してください。</p>
+        ) : (
+          <p>再起動が完了すると、この画面が自動で切り替わります。そのままお待ちください（通常は数秒〜十数秒）。</p>
+        )}
       </div>
     );
   }
@@ -378,7 +387,7 @@ export function StorageSetupPanel({
           {isChecking ? "確認中..." : "接続を確認"}
         </button>
         <button type="button" className="nav-button is-active" onClick={() => void handleSave()} disabled={!canSave}>
-          {isSaving ? "設定中..." : mode === "initial" ? "設定して開始" : "設定を保存"}
+          {isSaving ? "再起動中..." : mode === "initial" ? "設定して開始" : "設定を保存して再起動"}
         </button>
       </div>
     </div>

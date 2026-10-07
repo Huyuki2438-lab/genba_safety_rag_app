@@ -7,9 +7,11 @@ from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
-NAS = DIST / "01_NASへ配置" / "KY安全管理"
-PC = DIST / "02_各PCへ配置" / "KY安全管理"
-DOCS = DIST / "03_管理者向け資料"
+NAS = DIST / "01_NASへ配置"
+PC = DIST / "02_各PCへ配置"
+MANUAL_SRC = ROOT / "利用マニュアル"
+MANUAL_DIST = DIST / "03_マニュアル"
+DOCS = DIST / "04_管理者向け資料"
 PROMPTS_SRC = ROOT / "backend" / "app" / "core" / "prompts" / "templates"
 PROMPTS_DIST = DOCS / "AIプロンプト"
 NAS_UNC_ROOT = r"\\landisk-87a5d6\disk1\KY検出システムデータ\KY安全管理"
@@ -39,6 +41,14 @@ def main():
     if PROMPTS_DIST.exists():
         shutil.rmtree(PROMPTS_DIST)
     shutil.copytree(PROMPTS_SRC, PROMPTS_DIST)
+    # User manual (PDF only) shipped beside the other distribution folders.
+    manual = MANUAL_SRC / "現場KYアシスト_利用マニュアル.pdf"
+    if not manual.is_file():
+        raise SystemExit("User manual PDF not found in 利用マニュアル")
+    MANUAL_DIST.mkdir(parents=True, exist_ok=True)
+    for stale in MANUAL_DIST.glob("現場KYアシスト_利用マニュアル.html"):
+        stale.unlink()
+    shutil.copy2(manual, MANUAL_DIST / manual.name)
     # Preserve per-site configuration on subsequent builds.
     if not (PC / "config.json").exists():
         write(PC / "config.json", json.dumps({"project_id": "001", "project_name": "芝原改良工事",
@@ -51,7 +61,7 @@ def main():
     (PC / "secrets.env").write_text(secret, encoding="utf-8")
     write(PC / "README.txt", """
 【KY安全管理 使用方法】
-1. この「KY安全管理」フォルダを各PCのローカルディスクへコピーします。
+1. この「02_各PCへ配置」内のファイルを各PCのローカルディスクの任意のフォルダへコピーします。
 2. 「KY安全管理.exe」をダブルクリックします。専用のアプリウィンドウが開きます。初回は数十秒かかることがあります。
 3. 写真を選び、通常どおりKY分析を行います。保存された履歴は同じ現場のPCで共有されます。
 4. PDF保存ではNASに保存すると同時に、このPCへダウンロードします。
@@ -62,7 +72,7 @@ APIキーは設定済みです。通常、設定変更は不要です。フォ�
 """)
     write(NAS / "README_NAS.txt", """
 【NAS管理者向け】
-01_NASへ配置内の「KY安全管理」を次のフォルダへ配置します。
+01_NASへ配置内の各現場フォルダ（001_芝原改良工事等）を次のフォルダの直下へ配置します。
 例：\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理
 NASはデータ保管だけを担当します。EXE、secrets.env、APIキー、ログは置きません。
 利用者には各現場のdata以下で一覧表示・読み取り・作成・書き込み・名前変更・削除の権限が必要です。
@@ -78,8 +88,8 @@ NAS交換時は全員終了→フォルダ全体コピー→権限再設定→�
 """)
     write(DOCS / "導入手順.txt", """
 【初回導入】
-1. 01_NASへ配置のKY安全管理をNASへコピーし、共有名と権限を設定します。
-2. 02_各PCへ配置のKY安全管理/config.jsonを実際のUNCパスに合わせます。APIキーはsecrets.envに設定済みです。
+1. 01_NASへ配置内の各現場フォルダをNASの保存先フォルダ直下へコピーし、共有名と権限を設定します。
+2. 02_各PCへ配置のconfig.jsonを実際のUNCパスに合わせます。APIキーはsecrets.envに設定済みです。
    初期値：\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理\\001_芝原改良工事\\data
    NAS名・共有名・現場フォルダが異なる場合は配布前に変更が必要です。
 3. このPC用フォルダ（EXE、config.json、secrets.env、README.txtの4ファイル）を各PCへコピーします。

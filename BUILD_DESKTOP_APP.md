@@ -1,4 +1,4 @@
-> この文書の旧配布方式は廃止しました。現行版は `dist/03_管理者向け資料` と `NAS_DISTRIBUTION_REPORT.md` を参照してください。NAS上のSQLiteの共通更新は使用しません。
+> この文書の旧配布方式は廃止しました。現行版は `dist/04_管理者向け資料` と `NAS_DISTRIBUTION_REPORT.md` を参照してください。NAS上のSQLiteの共通更新は使用しません。
 
 # KY安全管理.exe のビルド
 

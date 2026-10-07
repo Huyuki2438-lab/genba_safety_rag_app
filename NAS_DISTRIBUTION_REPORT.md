@@ -20,7 +20,7 @@ localhostは各PC内部のUI/API通信に使用します。ログはLOCALAPPDATA
 - 画面：src/App.tsx、components/Header.tsx、HistoryView.tsx、ResultTabs.tsx、hooks/useGeminiSafetyAnalysis.ts、lib/analysisHistoryApi.ts、index.css。
 - 配布：desktop_app.py、desktop_app.spec、build_exe.ps1、vite.config.ts、requirements.txt、scripts/package_distribution.py（新規）。
 - 移行・検証：scripts/migrate_sqlite_history.py、test_shared_storage.py、test_distribution.py、test_real_nas.py（いずれも新規）、既存のimport_legacy_history.py、initialize_postgres.py。
-- 資料：DEPLOYMENT.md、BUILD_DESKTOP_APP.md、.env.shared.exampleに旧方式の廃止案内を追加。この報告書とdist/03_管理者向け資料を生成。
+- 資料：DEPLOYMENT.md、BUILD_DESKTOP_APP.md、.env.shared.exampleに旧方式の廃止案内を追加。この報告書とdist/04_管理者向け資料を生成。
 
 3. 主な変更内容
 

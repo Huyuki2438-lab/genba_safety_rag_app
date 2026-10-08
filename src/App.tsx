@@ -347,8 +347,8 @@ function App() {
                 <label>現場名<input value={siteName} onChange={(event) => setSiteName(event.target.value)} placeholder="例：芝原" /></label>
                 <label>登録者名<input value={createdBy} onChange={(event) => setCreatedBy(event.target.value)} placeholder="例：山田" maxLength={255} /></label>
               </div>
-              <label>作業内容<input value={workContent} onChange={(event) => setWorkContent(event.target.value)} placeholder="例：掘削" /></label>
-              <label>主な危険（任意）<input value={mainRisk} onChange={(event) => setMainRisk(event.target.value)} placeholder="例：重機接触" /></label>
+              <label>作業内容（任意）<input value={workContent} onChange={(event) => setWorkContent(event.target.value)} placeholder="例：掘削" /></label>
+              <label>主な危険（任意） <input value={mainRisk} onChange={(event) => setMainRisk(event.target.value)} placeholder="例：重機接触" /></label>
             </section>
 
             <AnalysisPanel

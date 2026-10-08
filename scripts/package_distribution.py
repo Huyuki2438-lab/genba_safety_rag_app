@@ -14,7 +14,7 @@ MANUAL_DIST = DIST / "03_マニュアル"
 DOCS = DIST / "04_管理者向け資料"
 PROMPTS_SRC = ROOT / "backend" / "app" / "core" / "prompts" / "templates"
 PROMPTS_DIST = DOCS / "AIプロンプト"
-NAS_UNC_ROOT = r"\\landisk-87a5d6\disk1\KY検出システムデータ\KY安全管理"
+NAS_UNC_ROOT = r"I:\マイドライブ\KY安全管理"
 
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +73,7 @@ APIキーは設定済みです。通常、設定変更は不要です。フォ�
     write(NAS / "README_NAS.txt", """
 【NAS管理者向け】
 01_NASへ配置内の各現場フォルダ（001_芝原改良工事等）を次のフォルダの直下へ配置します。
-例：\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理
+例：I:\\マイドライブ\\KY安全管理
 NASはデータ保管だけを担当します。EXE、secrets.env、APIキー、ログは置きません。
 利用者には各現場のdata以下で一覧表示・読み取り・作成・書き込み・名前変更・削除の権限が必要です。
 新しい現場はtemplate_projectをコピーして「002_○○工事」等へ改名します。
@@ -90,7 +90,7 @@ NAS交換時は全員終了→フォルダ全体コピー→権限再設定→�
 【初回導入】
 1. 01_NASへ配置内の各現場フォルダをNASの保存先フォルダ直下へコピーし、共有名と権限を設定します。
 2. 02_各PCへ配置のconfig.jsonを実際のUNCパスに合わせます。APIキーはsecrets.envに設定済みです。
-   初期値：\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理\\001_芝原改良工事\\data
+   初期値：I:\\マイドライブ\\KY安全管理\\001_芝原改良工事\\data
    NAS名・共有名・現場フォルダが異なる場合は配布前に変更が必要です。
 3. このPC用フォルダ（EXE、config.json、secrets.env、README.txtの4ファイル）を各PCへコピーします。
 4. EXEをダブルクリック。写真→分析→履歴→PDF保存→別PCで同じ履歴・写真・PDFを確認します。

@@ -30,7 +30,11 @@ class AnalysisService:
 
         # 1. Prompt generation (backend-driven; frontend values are ignored)
         system_instruction = self.prompt_manager.render("kiken_yochi_system.jinja2")
-        user_prompt = self.prompt_manager.render("kiken_yochi_user.jinja2")
+        user_prompt = self.prompt_manager.render(
+            "kiken_yochi_user.jinja2",
+            work_content=req.work_content.strip(),
+            main_risk=req.main_risk.strip(),
+        )
 
         # 2. Get AI provider and run inference (req is NOT mutated)
         provider = self.ai_factory.get_provider()

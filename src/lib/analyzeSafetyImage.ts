@@ -67,13 +67,19 @@ const normalizeResultFromAnalyzeResponse = (
 };
 
 const callSafetyAnalyzeApi = async ({
-  imageFile
+  imageFile,
+  workContent,
+  mainRisk
 }: {
   imageFile: File;
+  workContent: string;
+  mainRisk: string;
 }): Promise<AnalyzeImageSafetyResult> => {
   const requestBody = JSON.stringify({
     image_base64: await fileToBase64(imageFile),
-    image_mime_type: getImageMimeType(imageFile)
+    image_mime_type: getImageMimeType(imageFile),
+    work_content: workContent,
+    main_risk: mainRisk
   });
 
   const response = await fetch(ANALYZE_ENDPOINT, {
@@ -130,7 +136,9 @@ const isLikelyNetworkError = (error: unknown): boolean => {
 };
 
 export const analyzeSafetyImage = async ({
-  imageFile
+  imageFile,
+  workContent,
+  mainRisk
 }: AnalyzeImageSafetyInput): Promise<AnalyzeImageSafetyResult> => {
   if (!imageFile) {
     throw new SafetyAnalysisErrorClass(
@@ -140,7 +148,7 @@ export const analyzeSafetyImage = async ({
   }
 
   try {
-    return await callSafetyAnalyzeApi({ imageFile });
+    return await callSafetyAnalyzeApi({ imageFile, workContent, mainRisk });
   } catch (error) {
     if (error instanceof SafetyAnalysisErrorClass) {
       throw error;

@@ -12,6 +12,8 @@ class AnalyzeSafetyRequest(BaseModel):
   system_instruction: str = ""
   image_base64: str = Field(min_length=1)
   image_mime_type: str = "image/jpeg"
+  work_content: str = Field(default="", max_length=500)
+  main_risk: str = Field(default="", max_length=500)
 
 
 class KikenFactor(BaseModel):

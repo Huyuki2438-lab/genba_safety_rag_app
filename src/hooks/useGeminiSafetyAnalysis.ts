@@ -29,7 +29,11 @@ export const useGeminiSafetyAnalysis = () => {
     if (isAnalyzing || !selectedImage) { if (!selectedImage) setErrorMessage("写真を選択してください。"); return; }
     setIsAnalyzing(true); setErrorMessage(null); setAnalysisMarkdown(""); setActiveHistoryId(null); setPendingSave(null);
     try {
-      const result = await analyzeSafetyImage({ imageFile: selectedImage });
+      const result = await analyzeSafetyImage({
+        imageFile: selectedImage,
+        workContent: metadata.workContent,
+        mainRisk: metadata.mainRisk
+      });
       setAnalysisMarkdown(result.markdown);
       const saveInput: CreateHistoryInput = { imageName: selectedImage.name || "現場写真", imageMimeType: getImageMimeType(selectedImage), imageBase64: await fileToBase64(selectedImage), mode: AI_MODE, providerDisplayLabel: AI_PROVIDER_LABEL, model: result.usedModel, markdown: result.markdown, ...metadata };
       setPendingSave(saveInput);

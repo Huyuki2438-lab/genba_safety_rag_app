@@ -10,6 +10,8 @@ export type AnalysisErrorCode =
 
 export type AnalyzeImageSafetyInput = {
   imageFile: File | null;
+  workContent: string;
+  mainRisk: string;
 };
 
 export type AnalyzeImageSafetyResult = {

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -151,6 +151,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = ""
     GOOGLE_CLOUD_PROJECT: str = ""
     GOOGLE_CLOUD_LOCATION: str = "us-central1"
+    VERTEX_MAX_OUTPUT_TOKENS: int = Field(default=8192, ge=1)
 
     # Directory Paths
     STATIC_DIR: Path = BASE_DIR / "static"

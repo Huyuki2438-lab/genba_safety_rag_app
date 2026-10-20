@@ -42,13 +42,13 @@ def analyze_safety(req: AnalyzeSafetyRequest) -> AnalyzeSafetyResponse:
             ),
         ) from exc
     except UpstreamExecutionError as exc:
-        logger.error("Analysis upstream call failed (%s)", type(exc).__name__)
+        logger.error("Analysis upstream call failed (%s): %s", type(exc).__name__, redact(str(exc)))
         raise HTTPException(
             status_code=502,
             detail=_build_error_detail(
                 error_type="upstream_error",
                 error_category="API呼び出し失敗",
-                error_message="AI解析に失敗しました。しばらくしてから再度実行してください。",
+                error_message=redact(str(exc)),
             ),
         ) from exc
     except Exception as exc:

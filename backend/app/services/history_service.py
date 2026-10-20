@@ -14,6 +14,7 @@ from backend.app.core.config import settings
 from backend.app.core.shared_storage import publish, require_root
 from backend.app.repositories.history_repository import AnalysisHistoryRecord, HistoryRepository, HistoryStorageUnavailable, history_repository
 from backend.app.schemas.history import AnalysisHistoryEntry, CreateAnalysisHistoryRequest
+from backend.app.core.parser.analysis_parser import AnalysisParser
 
 try:
     JST = ZoneInfo("Asia/Tokyo")
@@ -63,6 +64,10 @@ class HistoryService:
         return _entry_from_record(record) if record else None
 
     def create(self, request: CreateAnalysisHistoryRequest, *, fallback_created_by: str) -> AnalysisHistoryEntry:
+        # Defense in depth: direct history API calls must not persist incomplete
+        # AI output. Existing records remain readable because list/get do not run
+        # this validation.
+        AnalysisParser.validate_complete(request.markdown)
         try:
             image_bytes = base64.b64decode(request.imageBase64, validate=True)
         except Exception as exc:

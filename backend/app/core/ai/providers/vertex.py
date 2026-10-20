@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from urllib import parse
 
-from backend.app.core.ai.base import AIBase
+from backend.app.core.ai.base import AIBase, AIResponse
 
 
 class VertexProvider(AIBase):
-    def __init__(self, api_key: str, model: str, project_id: str, location: str):
+    def __init__(self, api_key: str, model: str, project_id: str, location: str, max_output_tokens: int = 8192):
         self.api_key = api_key
         self.model = model
         self.project_id = project_id
         self.location = location
+        self.max_output_tokens = max_output_tokens
 
-    def predict(self, image_base64: str, image_mime_type: str, system_instruction: str, prompt: str) -> str:
+    def predict(self, image_base64: str, image_mime_type: str, system_instruction: str, prompt: str) -> AIResponse:
         encoded_model = parse.quote(self.model, safe="")
         encoded_project = parse.quote(self.project_id, safe="")
         encoded_location = parse.quote(self.location, safe="")
@@ -27,6 +28,7 @@ class VertexProvider(AIBase):
         )
 
         payload = {
+            "generationConfig": {"maxOutputTokens": self.max_output_tokens},
             "systemInstruction": {
                 "parts": [{"text": system_instruction}]
             },
@@ -47,4 +49,4 @@ class VertexProvider(AIBase):
         }
 
         response_json = self._post_json(url, payload, {"x-goog-api-key": self.api_key})
-        return self._extract_text(response_json)
+        return self._extract_response(response_json)

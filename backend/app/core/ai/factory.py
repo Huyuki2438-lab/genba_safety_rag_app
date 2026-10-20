@@ -12,4 +12,5 @@ class AIFactory:
             model=settings.GEMINI_MODEL,
             project_id=settings.GOOGLE_CLOUD_PROJECT,
             location=settings.GOOGLE_CLOUD_LOCATION,
+            max_output_tokens=settings.VERTEX_MAX_OUTPUT_TOKENS,
         )

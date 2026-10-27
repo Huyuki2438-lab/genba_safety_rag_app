@@ -38,7 +38,7 @@ C:\Users\doboku31\Desktop\AI・開発\genba_safety_rag_app\dist
 
 5. NASへコピーするフォルダ
 
-dist\01_NASへ配置\KY安全管理
+dist\01_NASへ配置
 
 コピー先：\\landisk-87a5d6\disk1\KY検出システムデータ\
 コピー後：\\landisk-87a5d6\disk1\KY検出システムデータ\KY安全管理
@@ -47,7 +47,7 @@ dist\01_NASへ配置\KY安全管理
 
 6. 各PCへコピーするフォルダ
 
-dist\02_各PCへ配置\KY安全管理
+dist\02_各PCへ配置
 
 各PCのデスクトップ等、ローカルディスクへフォルダごとコピーしてEXEをダブルクリックします。Python・Node.js・DBサーバーのインストールや利用者のコマンド操作は不要です。
 

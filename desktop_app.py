@@ -47,6 +47,13 @@ def _setup_logging(log_dir: Path) -> logging.Logger:
     handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     logger.addHandler(handler)
 
+    # FastAPI/service loggers use this namespace. Attach the same PC-local
+    # handler so exceptions raised in the bundled exe are captured as well.
+    app_logger = logging.getLogger("genba_safety_rag_app")
+    app_logger.setLevel(logging.INFO)
+    app_logger.addHandler(handler)
+    app_logger.propagate = False
+
     _cleanup_old_logs(log_dir, keep_days=14)
 
     return logger

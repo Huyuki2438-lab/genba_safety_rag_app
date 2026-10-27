@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterable
 
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
 
 SECTION_TITLES = {
     "OVERALL": "1. 総合評価",
@@ -20,6 +22,12 @@ MARKDOWN_PREFIX = re.compile(r"^\s{0,3}(?:#{1,6}\s*|[-*+]\s+|\d+[.)]\s+|>\s?)")
 MARKDOWN_EMPHASIS = re.compile(r"(\*\*|__|`|~~)")
 SUBSECTION_PREFIX = re.compile(r"^\s*#{1,6}\s*(\d+[-－]\d+\.?\s*.*)$")
 LABEL_VALUE = re.compile(r"^\s*[-*+]?\s*([^:：]+?)\s*[:：]\s*(.*)$")
+
+
+def _sanitize_excel_text(value: object, default: str = "－") -> str:
+    """Remove only control characters that Excel's XML format forbids."""
+    text = str(value if value is not None and value != "" else default)
+    return ILLEGAL_CHARACTERS_RE.sub("", text)
 
 
 @dataclass
@@ -191,12 +199,28 @@ def _measures(lines: list[str]) -> list[Measure]:
 
 
 def _image_from_data_url(data_url: str):
-    from openpyxl.drawing.image import Image
+    from openpyxl.drawing.image import Image as ExcelImage
+
     header, separator, encoded = data_url.partition(",")
     if not separator or not header.lower().startswith("data:image/"):
         return None
     try:
-        image = Image(io.BytesIO(base64.b64decode(encoded, validate=True)))
+        image_bytes = base64.b64decode(encoded, validate=True)
+        image = ExcelImage(io.BytesIO(image_bytes))
+
+        # openpyxl can only register GIF/JPEG/PNG media types in an xlsx.
+        # Some phones and cameras send an MPO container as image/jpeg; Pillow
+        # correctly identifies it as MPO, but openpyxl then tries to register
+        # the unsupported ".mpo" extension and fails while saving the workbook.
+        if image.format not in {"gif", "jpeg", "png"}:
+            from PIL import Image as PillowImage
+
+            normalized = io.BytesIO()
+            with PillowImage.open(io.BytesIO(image_bytes)) as source:
+                source.seek(0)
+                source.convert("RGBA").save(normalized, format="PNG")
+            normalized.seek(0)
+            image = ExcelImage(normalized)
     except Exception:
         return None
     scale = min(1, 600 / image.width, 360 / image.height)
@@ -245,7 +269,7 @@ def generate_excel_report(context: dict[str, object]) -> bytes:
     def merged_cell(row: int, first: int, last: int, value: object, *, fill: str | None = None,
                     font: Font | None = None, alignment: Alignment | None = None, height: float | None = None) -> None:
         sheet.merge_cells(start_row=row, start_column=first, end_row=row, end_column=last)
-        anchor = sheet.cell(row, first, value)
+        anchor = sheet.cell(row, first, _sanitize_excel_text(value))
         anchor.font, anchor.alignment = font or base_font, alignment or wrapped
         if fill:
             anchor.fill = PatternFill("solid", fgColor=fill)
@@ -268,7 +292,7 @@ def generate_excel_report(context: dict[str, object]) -> bytes:
         for first, last, value in values:
             merged_cell(row, first, last, value, fill=blue, font=Font(name="Meiryo", size=10, bold=True, color=dark), alignment=centered, height=28)
 
-    title = str(context.get("title") or "現場安全 危険分析レポート")
+    title = _sanitize_excel_text(context.get("title"), "現場安全 危険分析レポート")
     sheet.merge_cells("A1:H2")
     title_cell = sheet["A1"]
     title_cell.value, title_cell.font, title_cell.fill, title_cell.alignment = title, Font(name="Meiryo", size=18, bold=True, color=white), PatternFill("solid", fgColor=navy), centered

@@ -15,7 +15,7 @@ import urllib.request
 import urllib.error
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "dist" / "02_各PCへ配置" / "KY安全管理"
+SOURCE = ROOT / "dist" / "02_各PCへ配置"
 BASE = ROOT / "tmp" / ("first_run_test_" + uuid.uuid4().hex[:8])
 RESULTS = []
 

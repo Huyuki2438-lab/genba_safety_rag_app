@@ -16,7 +16,7 @@ npm install
 
 `build_exe.ps1` はReactのビルド、PyInstallerのonedirビルド（`build\portable\KY安全管理.exe`）、`scripts\package_distribution.py` による配布物の組み立て（`dist\` 配下）を順に行います。
 
-出力される `dist\02_各PCへ配置\KY安全管理` フォルダ一式（EXE・`config.json`・`secrets.env`）をローカルPCへ配布してください。`_internal` がPython/DLL依存ファイルです。
+出力される `dist\02_各PCへ配置` フォルダ一式（EXE・`config.json`・`secrets.env`）をローカルPCへ配布してください。
 
 ## 配布前の素材確認
 

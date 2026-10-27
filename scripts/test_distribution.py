@@ -1,6 +1,7 @@
 """Portable EXE integration tests. Uses an isolated copy; never alters deployed config."""
 import base64
 import concurrent.futures
+import io
 import json
 import os
 import re
@@ -16,13 +17,14 @@ import uuid
 import zlib
 from pathlib import Path
 from dotenv import dotenv_values
+from PIL import Image as PillowImage
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "tmp" / ("portable_test_" + uuid.uuid4().hex[:8])
 BASE.mkdir(parents=True)
 SHARED = BASE / "共有 日本語 空白" / "data"
 for part in ("records", "images", "reports", "export"):
     (SHARED / part).mkdir(parents=True)
-SOURCE = ROOT / "dist" / "02_各PCへ配置" / "KY安全管理"
+SOURCE = ROOT / "dist" / "02_各PCへ配置"
 KEY = dotenv_values(SOURCE / "secrets.env")["VERTEX_API_KEY"]
 RESULTS = []
 PROCESSES = []
@@ -54,6 +56,13 @@ def png():
     def chunk(kind, content):
         return struct.pack('!I',len(content))+kind+content+struct.pack('!I', zlib.crc32(kind+content)&0xffffffff)
     return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!2I5B',64,64,8,2,0,0,0))+chunk(b'IDAT',zlib.compress((b'\0'+b'\x88\xaa\xcc'*64)*64))+chunk(b'IEND',b'')
+
+def mpo():
+    output = io.BytesIO()
+    first = PillowImage.new('RGB', (64, 64), '#88aacc')
+    second = PillowImage.new('RGB', (64, 64), '#446688')
+    first.save(output, format='MPO', save_all=True, append_images=[second])
+    return output.getvalue()
 
 def rename_fixture(source, target):
     # Windows may briefly hold a photo handle after an HTTP image response.
@@ -103,8 +112,33 @@ if __name__ == "__main__":
         duplicate=subprocess.Popen([str(folder / "KY安全管理.exe")],cwd=folder,env=env,creationflags=subprocess.CREATE_NO_WINDOW)
         check("duplicate launch exits",duplicate.wait(timeout=45)==0 and first.poll() is None)
         fixture=png(); (BASE/"fixture.png").write_bytes(fixture)
+        markdown="""[SECTION:OVERALL]
+# 1. 総合評価
+- 5件を抽出しました。
+[SECTION:SUMMARY]
+# 2. リスク要約表
+| No | リスク項目 | 危険な理由 | 重大度 | 推奨対策 |
+| --- | --- | --- | --- | --- |
+| 1 | 接触1 | 状況1で事故につながる | 高 | 職長が区画する |
+| 2 | 接触2 | 状況2で事故につながる | 高 | 誘導員が合図する |
+| 3 | 接触3 | 状況3で事故につながる | 中 | 運転者が確認する |
+| 4 | 接触4 | 状況4で事故につながる | 中 | 作業員が退避する |
+| 5 | 接触5 | 状況5で事故につながる | 低 | 職長が確認する |
+[SECTION:RISKS]
+# 3. 詳細リスク
+## 3-1. 接触1
+- 観察事項: 重機と作業員が近接
+- 想定される事故: 接触
+[SECTION:SOLUTIONS]
+# 4. 是正計画
+## 4-1. 即時対応
+- 誘導員が立入区画を明示する
+[SECTION:ADDITIONAL]
+# 5. 補足事項
+- 作業前に確認する
+"""
         payload={"imageName":"試験 写真.png","imageMimeType":"image/png","imageBase64":base64.b64encode(fixture).decode(),
-                 "mode":"vertex","providerDisplayLabel":"KY","model":"test","markdown":"## 危険予知\n\n| 危険 | 重大度 | 対策 |\n| --- | --- | --- |\n| 重機接触 | 高 | 立入禁止・誘導員配置 |",
+                 "mode":"vertex","providerDisplayLabel":"KY","model":"test","markdown":markdown,
                  "siteName":"テスト現場","workContent":"掘削","mainRisk":"重機接触"}
         with concurrent.futures.ThreadPoolExecutor(2) as pool:
             saved=list(pool.map(lambda port: call(port,"/api/v1/history",payload), [a,b]))
@@ -121,8 +155,8 @@ if __name__ == "__main__":
         check("PC B reads shared PDF",bool(report_list) and call(b,report_list[0]['url'])[0]==200)
         excel=call(a,"/api/v1/excel",{"record_id":ids[0],"generated_at":"2026/10/01 12:00",
             "markdown":payload["markdown"],"output_filename":"検証レポート.xlsx","site_name":"テスト現場",
-            "work_content":"掘削","main_risk":"重機接触","image_data_url":"data:image/png;base64,"+payload["imageBase64"]})
-        check("Excel generated and saved to NAS folder",excel[0]==200 and excel[1].startswith(b'PK') and len(list((SHARED/'reports').rglob('*.xlsx')))==1)
+            "work_content":"掘削\t作業","main_risk":"重機接触\x00禁止文字","image_data_url":"data:image/jpeg;base64,"+base64.b64encode(mpo()).decode()})
+        check("Excel sanitizes controls, normalizes MPO, and saves to shared folder",excel[0]==200 and excel[1].startswith(b'PK') and len(list((SHARED/'reports').rglob('*.xlsx')))==1)
         exported=call(b,f'/api/v1/history/{ids[0]}/export',{})
         check("export ZIP shared",exported[0]==200 and exported[1].startswith(b'PK') and len(list((SHARED/'export').glob('*.zip')))==1)
         (SHARED/'records'/'broken.json').write_text('{')
@@ -160,7 +194,7 @@ if __name__ == "__main__":
                 page.screenshot(path=str(BASE/'history.png'),full_page=True)
                 page.get_by_role('button',name='KY作成画面で再表示',exact=True).click()
                 page.get_by_role('button',name='履歴',exact=True).wait_for()
-                check('history detail and reopen UI', '重機接触' in page.locator('body').inner_text())
+                check('history detail and reopen UI', '接触1' in page.locator('body').inner_text())
                 check_secret(page.content().encode())
                 page.screenshot(path=str(BASE/'main.png'),full_page=True)
                 with page.expect_download() as download:
@@ -176,7 +210,7 @@ if __name__ == "__main__":
                 page.route('**/api/v1/history', lambda route: route.fulfill(status=503, json={'detail':'共有フォルダに接続できません。'}))
                 page.get_by_role('button',name='危険分析を開始',exact=True).click()
                 page.get_by_role('button',name='分析結果の保存を再試行',exact=True).wait_for()
-                check('failed save retains result and offers retry', '重機接触' in page.locator('body').inner_text())
+                check('failed save retains result and offers retry', '接触1' in page.locator('body').inner_text())
                 page.unroute('**/api/v1/history')
                 with page.expect_response(lambda r: r.url.endswith('/api/v1/history') and r.request.method == 'POST' and r.status == 201):
                     page.get_by_role('button',name='分析結果の保存を再試行',exact=True).click()
@@ -185,10 +219,9 @@ if __name__ == "__main__":
 
             finally:
                 browser.close()
-        old_data=ROOT/'dist/01_NASへ配置/KY安全管理/001_芝原改良工事/data'
-        shutil.copytree(old_data,SHARED,dirs_exist_ok=True)
-        legacy=json.loads(next((old_data/'records').rglob('*.json')).read_text(encoding='utf-8'))
-        check('new EXE reads migrated existing history and PDF', call(a,f"/api/v1/history/{legacy['record_id']}")[0]==200 and len(json.loads(call(b,f"/api/v1/history/{legacy['record_id']}/reports")[1])['reports'])==1)
+        existing_report_dir=next(path for path in (SHARED/'reports').iterdir() if any(path.glob('*.pdf')))
+        existing_id=existing_report_dir.name
+        check('new EXE reads existing history and PDF', call(a,f"/api/v1/history/{existing_id}")[0]==200 and len(json.loads(call(b,f"/api/v1/history/{existing_id}/reports")[1])['reports'])==1)
         for port in ports: check('shutdown response',call(port,'/api/v1/shutdown',{})[0]==200)
         check('both EXE processes exit',all(p.wait(timeout=110)==0 for p in PROCESSES))
         check('local ports closed',all(socket.socket().connect_ex(('127.0.0.1',port))!=0 for port in ports))

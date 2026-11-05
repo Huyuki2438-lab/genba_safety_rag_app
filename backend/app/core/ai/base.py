@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -45,6 +46,74 @@ class AIResponse:
 
 logger = logging.getLogger("genba_safety_rag_app.ai")
 
+_SAFE_CODE = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
+_SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9_.\-:]{1,128}$")
+_REQUEST_ID_HEADERS = ("x-goog-request-id", "x-request-id", "x-cloud-trace-context")
+
+
+def _safe_value(value: Any, pattern: re.Pattern[str]) -> str | None:
+    """Return the value only if it is a short token of harmless characters."""
+    if isinstance(value, str) and pattern.match(value):
+        return value
+    return None
+
+
+_AUTH_ERROR_STATUSES = frozenset({"UNAUTHENTICATED", "PERMISSION_DENIED"})
+_AUTH_REASON_MARKERS = (
+    "API_KEY", "ACCESS_TOKEN", "CREDENTIAL", "AUTH", "IAM_PERMISSION_DENIED",
+    "SERVICE_DISABLED", "ACCOUNT_STATE_INVALID", "USER_PROJECT_DENIED",
+    "CONSUMER_INVALID", "SECURITY_POLICY_VIOLATED",
+)
+
+
+def is_auth_related_error(diag: dict[str, Any]) -> bool:
+    """401/403 are always auth errors; 400 only when Google's status/reason says so."""
+    http_status = diag.get("http_status")
+    if http_status in (401, 403):
+        return True
+    if http_status != 400:
+        return False
+    if diag.get("error_status") in _AUTH_ERROR_STATUSES:
+        return True
+    reason = (diag.get("reason") or "").upper()
+    return any(marker in reason for marker in _AUTH_REASON_MARKERS)
+
+
+def extract_auth_diagnostics(http_status: int, response_json: dict[str, Any], headers: Any = None) -> dict[str, Any]:
+    """Pick only whitelisted, format-validated fields from a Google error response.
+
+    Never returns the error message, request body, headers or tokens.
+    """
+    error_obj = response_json.get("error") if isinstance(response_json, dict) else None
+    if not isinstance(error_obj, dict):
+        error_obj = {}
+    reasons: list[str] = []
+    details = error_obj.get("details")
+    if isinstance(details, list):
+        for item in details[:10]:
+            if isinstance(item, dict):
+                reason = _safe_value(item.get("reason"), _SAFE_CODE)
+                if reason and reason not in reasons:
+                    reasons.append(reason)
+    request_id = None
+    if headers is not None:
+        for name in _REQUEST_ID_HEADERS:
+            try:
+                candidate = headers.get(name)
+            except Exception:
+                candidate = None
+            request_id = _safe_value(candidate, _SAFE_REQUEST_ID)
+            if request_id:
+                break
+    if not request_id:
+        request_id = _safe_value(response_json.get("responseId") if isinstance(response_json, dict) else None, _SAFE_REQUEST_ID)
+    return {
+        "http_status": http_status,
+        "error_status": _safe_value(error_obj.get("status"), _SAFE_CODE),
+        "reason": ",".join(reasons) if reasons else None,
+        "request_id": request_id,
+    }
+
 
 class AIBase(ABC):
     @abstractmethod
@@ -77,6 +146,15 @@ class AIBase(ABC):
                 response_json = parsed if isinstance(parsed, dict) else {}
             except (OSError, ValueError, TypeError):
                 pass
+            if exc.code in (400, 401, 403):
+                diag = extract_auth_diagnostics(exc.code, response_json, getattr(exc, "headers", None))
+            else:
+                diag = None
+            if diag is not None and is_auth_related_error(diag):
+                logger.error(
+                    "Vertex AI auth error: http_status=%s error_status=%s reason=%s request_id=%s",
+                    diag["http_status"], diag["error_status"] or "-", diag["reason"] or "-", diag["request_id"] or "-",
+                )
             usage_metadata = response_json.get("usageMetadata")
             raise UpstreamExecutionError(
                 f"AIサービスへの接続に失敗しました（HTTP {exc.code}）。管理者へ連絡してください。",

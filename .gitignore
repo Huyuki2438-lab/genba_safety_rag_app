@@ -39,3 +39,9 @@ secrets.env
 /frontend_build/
 /tmp/
 /config.json
+
+# Test-only credentials copy (never commit)
+/コピー.env
+
+# Local development data (never commit)
+/data/

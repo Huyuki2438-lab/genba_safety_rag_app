@@ -153,6 +153,105 @@ class UsageLedgerTests(unittest.TestCase):
         self.assertEqual(caught.exception.http_status, 429)
         self.assertEqual(caught.exception.usage_metadata["totalTokenCount"], 4)
 
+    def _auth_error(self, code, body_bytes, headers=None):
+        return HTTPError("https://example.invalid", code, "x", headers or {}, io.BytesIO(body_bytes))
+
+    def test_auth_errors_log_safe_diagnostics_only(self):
+        secret = "AIzaSySECRET-KEY-123"
+        cases = [
+            (401, "UNAUTHENTICATED", "ACCESS_TOKEN_EXPIRED"),
+            (401, "UNAUTHENTICATED", None),
+            (403, "PERMISSION_DENIED", "IAM_PERMISSION_DENIED"),
+            (401, "UNAUTHENTICATED", "API_KEY_INVALID"),
+            (403, "PERMISSION_DENIED", "API_KEY_INVALID"),
+        ]
+        for code, status, reason in cases:
+            with self.subTest(code=code, reason=reason):
+                err = {"code": code, "status": status, "message": f"bad key {secret} Bearer ya29.TOKEN"}
+                if reason:
+                    err["details"] = [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason}]
+                body = json.dumps({"error": err}).encode()
+                exc = self._auth_error(code, body, {"x-goog-request-id": "req-abc123"})
+                with patch("backend.app.core.ai.base.request.urlopen", side_effect=exc):
+                    with self.assertLogs("genba_safety_rag_app.ai", level="ERROR") as logs:
+                        with self.assertRaises(UpstreamExecutionError) as caught:
+                            Extractor()._post_json(
+                                "https://example.invalid", {"prompt": "REQUESTBODY"},
+                                {"x-goog-api-key": secret, "Authorization": "Bearer ya29.TOKEN"},
+                            )
+                self.assertEqual(caught.exception.status, "http_error")
+                self.assertEqual(caught.exception.http_status, code)
+                text = " | ".join(logs.output)
+                if code in (401, 403):
+                    self.assertIn(f"http_status={code}", text)
+                    self.assertIn(f"error_status={status}", text)
+                    self.assertIn(f"reason={reason or '-'}", text)
+                    self.assertIn("request_id=req-abc123", text)
+                for leaked in (secret, "ya29", "Bearer", "REQUESTBODY", "bad key"):
+                    self.assertNotIn(leaked, text)
+                    self.assertNotIn(leaked, str(caught.exception))
+
+    def test_auth_error_non_json_or_hostile_values_are_safe(self):
+        for body in (b"<html>403 secret-token</html>", b"[1,2]", b"", b'{"error": "str"}',
+                     json.dumps({"error": {"status": "X FAKE LOG secret", "details": [1, {"reason": "a b secret"}]}}).encode()):
+            with self.subTest(body=body):
+                with patch("backend.app.core.ai.base.request.urlopen", side_effect=self._auth_error(403, body)):
+                    with self.assertLogs("genba_safety_rag_app.ai", level="ERROR") as logs:
+                        with self.assertRaises(UpstreamExecutionError) as caught:
+                            Extractor()._post_json("https://example.invalid", {}, {})
+                self.assertEqual(caught.exception.status, "http_error")
+                text = " | ".join(logs.output)
+                self.assertIn("http_status=403 error_status=-", text)
+                self.assertNotIn("secret", text)
+                self.assertNotIn("FAKE", text)
+
+    def test_auth_http_error_is_recorded_in_ledger(self):
+        repo = FakeUsageRepository()
+        exc = self._auth_error(401, json.dumps({"error": {"status": "UNAUTHENTICATED"}}).encode())
+        class P:
+            def predict(self, **kwargs):
+                with patch("backend.app.core.ai.base.request.urlopen", side_effect=exc):
+                    Extractor()._post_json("https://example.invalid", {}, {})
+        with self.assertRaises(UpstreamExecutionError):
+            self._run(self._service(P(), repo))
+        self.assertEqual(repo.records[0].status, "http_error")
+
+    def test_http_400_logs_auth_diagnostics_only_when_auth_related(self):
+        secret = "AIzaSySECRET-KEY-123"
+        cases = [
+            ("INVALID_ARGUMENT", "API_KEY_INVALID", True),
+            ("UNAUTHENTICATED", None, True),
+            ("PERMISSION_DENIED", None, True),
+            ("INVALID_ARGUMENT", "ACCESS_TOKEN_EXPIRED", True),
+            ("INVALID_ARGUMENT", None, False),
+            ("INVALID_ARGUMENT", "BAD_REQUEST_FIELD", False),
+            ("FAILED_PRECONDITION", None, False),
+        ]
+        for status, reason, expect_log in cases:
+            with self.subTest(status=status, reason=reason):
+                err = {"code": 400, "status": status, "message": f"bad {secret}"}
+                if reason:
+                    err["details"] = [{"reason": reason}]
+                exc = self._auth_error(400, json.dumps({"error": err}).encode(), {"x-goog-request-id": "req-400"})
+                with patch("backend.app.core.ai.base.request.urlopen", side_effect=exc):
+                    with self.assertRaises(UpstreamExecutionError) as caught:
+                        if expect_log:
+                            with self.assertLogs("genba_safety_rag_app.ai", level="ERROR") as logs:
+                                Extractor()._post_json("https://example.invalid", {}, {"x-goog-api-key": secret})
+                        else:
+                            with self.assertNoLogs("genba_safety_rag_app.ai", level="ERROR"):
+                                Extractor()._post_json("https://example.invalid", {}, {"x-goog-api-key": secret})
+                self.assertEqual(caught.exception.status, "http_error")
+                self.assertEqual(caught.exception.http_status, 400)
+                self.assertNotIn(secret, str(caught.exception))
+                if expect_log:
+                    text = " | ".join(logs.output)
+                    self.assertIn("http_status=400", text)
+                    self.assertIn(f"error_status={status}", text)
+                    self.assertIn(f"reason={reason or '-'}", text)
+                    self.assertNotIn(secret, text)
+                    self.assertNotIn("bad ", text)
+
     def test_transport_timeout_has_communication_status_and_no_usage(self):
         with patch("backend.app.core.ai.base.request.urlopen", side_effect=TimeoutError("timed out")):
             with self.assertRaises(UpstreamExecutionError) as caught:

@@ -156,11 +156,12 @@ class UsageRepository:
         try:
             publish(path, content)
             return record
-        except HistoryStorageUnavailable:
+        except HistoryStorageUnavailable as exc:
             existing = self._read_existing(path)
             if existing is not None and existing.request_id == record.request_id:
                 return existing
-            raise UsageStorageUnavailable(f"API利用台帳を保存できません: {path.parent}") from None
+            # exc text is a path + OS reason only (no payload / secrets).
+            raise UsageStorageUnavailable(f"API利用台帳を保存できません: {path.parent} / {exc}") from None
 
     @staticmethod
     def _read_existing(path: Path) -> APIUsageRecord | None:

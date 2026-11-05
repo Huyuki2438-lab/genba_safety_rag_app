@@ -65,15 +65,16 @@ class AnalysisService:
         )
         try:
             self.usage_repository.add(record)
-        except UsageStorageUnavailable:
+        except UsageStorageUnavailable as exc:
             # Usage recording is deliberately best-effort. Returning a valid
             # analysis avoids causing a second paid Vertex call when the NAS is
             # temporarily unavailable. Never log request payloads or secrets.
             logger.error(
-                "Vertex usage ledger write failed: request_id=%s usage_id=%s status=%s",
+                "Vertex usage ledger write failed (usage NOT recorded): request_id=%s usage_id=%s status=%s reason=%s",
                 record.request_id,
                 record.usage_id,
                 record.status,
+                exc,
             )
 
     def run_analysis(self, req: AnalyzeSafetyRequest) -> AnalyzeSafetyResponse:

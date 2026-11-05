@@ -12,6 +12,14 @@ export default defineConfig({
       ignored: [
         "**/history/**",
         "**/data/**",
+        "**/tmp/**",
+        "**/.step5-2-test/**",
+        "**/.venv/**",
+        "**/build/**",
+        "**/dist/**",
+        "**/frontend_build/**",
+        "**/release/**",
+        "**/pw-browsers/**",
         "**/reference_pdfs/**",
         "**/static/**",
         "**/*.tsbuildinfo"
@@ -22,7 +30,7 @@ export default defineConfig({
       "/reports": { target: backendTarget, changeOrigin: true },
       "/api": {
         target: backendTarget,
-        changeOrigin: true
+        changeOrigin: false
       },
       "/analyze": {
         target: backendTarget,

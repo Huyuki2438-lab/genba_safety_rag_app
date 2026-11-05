@@ -2,7 +2,7 @@ import { HISTORY_ENDPOINT } from "../constants/endpoints";
 import type { AnalysisHistoryEntry } from "../types/analysis";
 
 export type HistoryFilters = { dateFrom?: string; dateTo?: string; siteName?: string; workContent?: string; createdBy?: string; keyword?: string };
-export type CreateHistoryInput = { imageName: string; imageMimeType: string; imageBase64: string; mode: string; providerDisplayLabel: string; model: string; markdown: string; siteName: string; workContent: string; mainRisk: string; createdBy: string };
+export type CreateHistoryInput = { requestId?: string; imageName: string; imageMimeType: string; imageBase64: string; mode: string; providerDisplayLabel: string; model: string; markdown: string; siteName: string; workContent: string; mainRisk: string; createdBy: string };
 
 export const fetchLastRegistrant = async (): Promise<string> => {
   const response = await fetch("/api/v1/settings/last-registrant");

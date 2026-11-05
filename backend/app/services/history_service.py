@@ -68,6 +68,13 @@ class HistoryService:
         # AI output. Existing records remain readable because list/get do not run
         # this validation.
         AnalysisParser.validate_complete(request.markdown)
+        entry_id = str(uuid.UUID(request.requestId)) if request.requestId else str(uuid.uuid4())
+        if request.requestId:
+            existing = self._repo.get_any(entry_id)
+            if existing is not None:
+                if existing.markdown == request.markdown and existing.model == request.model:
+                    return _entry_from_record(existing)
+                raise ValueError("同じrequestIdで異なる解析履歴は保存できません。")
         try:
             image_bytes = base64.b64decode(request.imageBase64, validate=True)
         except Exception as exc:
@@ -77,7 +84,6 @@ class HistoryService:
         require_root(settings.DATA_DIR / "records")
         require_root(settings.PHOTO_STORAGE_DIR)
         now = datetime.now(JST)
-        entry_id = str(uuid.uuid4())
         relative_path = Path(f"{now:%Y}") / f"{now:%m}" / f"{entry_id}{_extension(request.imageName, request.imageMimeType)}"
         destination = settings.PHOTO_STORAGE_DIR / relative_path
         try:

@@ -73,6 +73,11 @@ class FakeRepository:
         return record
 
 
+class FakeUsageRepository:
+    def add(self, record):
+        return record
+
+
 class VertexResponseQualityTests(unittest.TestCase):
     def setUp(self):
         self.extractor = Extractor()
@@ -125,7 +130,7 @@ class VertexResponseQualityTests(unittest.TestCase):
             self.extractor._extract_response(vertex_response(include_reason=False))
 
     def test_10_complete_analysis_is_saved_and_model_version_is_used(self):
-        service = AnalysisService()
+        service = AnalysisService(usage_repo=FakeUsageRepository())
         ai_response = AIResponse(
             text=NORMAL_MARKDOWN, model_version="actual-model-version", finish_reason="STOP",
             response_id="response-123", usage_metadata={"totalTokenCount": 30},
@@ -192,6 +197,23 @@ class VertexResponseQualityTests(unittest.TestCase):
         provider.predict("image", "image/jpeg", "system", "prompt")
         self.assertEqual(captured["generationConfig"]["maxOutputTokens"], 1234)
         self.assertEqual(type(settings).model_fields["VERTEX_MAX_OUTPUT_TOKENS"].default, 8192)
+
+    def test_history_retry_reuses_analysis_request_id(self):
+        request_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        request = self._history_request(NORMAL_MARKDOWN).model_copy(update={"requestId": request_id})
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "records").mkdir()
+            (root / "images").mkdir()
+            repository = HistoryRepository(root=root, project_id="project")
+            history = HistoryService(repository=repository)
+            with patch.multiple(settings, DATA_DIR=root, PHOTO_STORAGE_DIR=root / "images"):
+                first = history.create(request, fallback_created_by="tester")
+                second = history.create(request, fallback_created_by="tester")
+                record_count = len(list((root / "records").rglob("*.json")))
+        self.assertEqual(first.id, request_id)
+        self.assertEqual(second.id, request_id)
+        self.assertEqual(record_count, 1)
 
     @staticmethod
     def _history_request(markdown):

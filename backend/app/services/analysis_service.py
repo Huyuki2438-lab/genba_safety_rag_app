@@ -14,6 +14,13 @@ from backend.app.schemas.analysis import (
 from backend.app.core.config import settings
 from backend.app.core.secrets import redact
 from backend.app.core.ai.base import AIResponse, UpstreamExecutionError
+from backend.app.repositories.usage_repository import (
+    UsageRepository,
+    UsageStatus,
+    UsageStorageUnavailable,
+    build_usage_record,
+    usage_repository,
+)
 
 
 class AIConfigurationError(RuntimeError):
@@ -32,10 +39,42 @@ def _safe_usage_metadata(value: dict) -> dict[str, int]:
 
 
 class AnalysisService:
-    def __init__(self):
+    def __init__(self, usage_repo: UsageRepository | None = None):
         self.ai_factory = AIFactory()
         self.prompt_manager = prompt_manager
         self.parser = AnalysisParser()
+        self.usage_repository = usage_repo or usage_repository
+
+    def _record_usage(
+        self,
+        *,
+        request_id: str,
+        created_at: datetime,
+        model: str,
+        status: UsageStatus,
+        response_id: str | None,
+        usage_metadata: dict | None,
+    ) -> None:
+        record = build_usage_record(
+            request_id=request_id,
+            created_at=created_at,
+            model=model,
+            status=status,
+            response_id=response_id,
+            usage_metadata=usage_metadata,
+        )
+        try:
+            self.usage_repository.add(record)
+        except UsageStorageUnavailable:
+            # Usage recording is deliberately best-effort. Returning a valid
+            # analysis avoids causing a second paid Vertex call when the NAS is
+            # temporarily unavailable. Never log request payloads or secrets.
+            logger.error(
+                "Vertex usage ledger write failed: request_id=%s usage_id=%s status=%s",
+                record.request_id,
+                record.usage_id,
+                record.status,
+            )
 
     def run_analysis(self, req: AnalyzeSafetyRequest) -> AnalyzeSafetyResponse:
         if not (settings.VERTEX_API_KEY and settings.GEMINI_MODEL and settings.GOOGLE_CLOUD_PROJECT):
@@ -51,12 +90,30 @@ class AnalysisService:
 
         # 2. Get AI provider and run inference (req is NOT mutated)
         provider = self.ai_factory.get_provider()
-        prediction = provider.predict(
-            image_base64=req.image_base64,
-            image_mime_type=req.image_mime_type,
-            system_instruction=system_instruction,
-            prompt=user_prompt,
-        )
+        request_id = str(uuid.uuid4())
+        requested_at = datetime.now().astimezone()
+        try:
+            prediction = provider.predict(
+                image_base64=req.image_base64,
+                image_mime_type=req.image_mime_type,
+                system_instruction=system_instruction,
+                prompt=user_prompt,
+            )
+        except UpstreamExecutionError as exc:
+            raw_status = getattr(exc, "status", "upstream_error")
+            status: UsageStatus = raw_status if raw_status in {
+                "max_tokens", "safety", "response_error", "http_error",
+                "communication_error", "upstream_error",
+            } else "upstream_error"
+            self._record_usage(
+                request_id=request_id,
+                created_at=requested_at,
+                model=getattr(exc, "model_version", None) or settings.GEMINI_MODEL,
+                status=status,
+                response_id=getattr(exc, "response_id", None),
+                usage_metadata=getattr(exc, "usage_metadata", None),
+            )
+            raise
 
         if isinstance(prediction, AIResponse):
             markdown = redact(prediction.text)
@@ -76,10 +133,29 @@ class AnalysisService:
         try:
             factors = self.parser.validate_complete(markdown)
         except ValueError as exc:
+            self._record_usage(
+                request_id=request_id,
+                created_at=requested_at,
+                model=used_model,
+                status="markdown_validation_failed",
+                response_id=prediction.response_id,
+                usage_metadata=prediction.usage_metadata,
+            )
             raise UpstreamExecutionError(str(exc)) from exc
 
+        self._record_usage(
+            request_id=request_id,
+            created_at=requested_at,
+            model=used_model,
+            status="success",
+            response_id=prediction.response_id,
+            usage_metadata=prediction.usage_metadata,
+        )
+
         # 4. Build intermediate result
-        result_id = str(uuid.uuid4())
+        # The analysis result id is the app-issued Vertex request id. It lets a
+        # later history save be correlated without changing history JSON.
+        result_id = request_id
         timestamp = datetime.now().isoformat()
 
         analysis_result = SafetyAnalysisResult(

@@ -1,8 +1,9 @@
-export type AppPage = "create" | "history" | "settings";
+export type AppPage = "create" | "history" | "usage" | "settings";
 
 const TABS: { page: AppPage; label: string }[] = [
   { page: "create", label: "KY作成" },
   { page: "history", label: "履歴" },
+  { page: "usage", label: "利用料金管理" },
   { page: "settings", label: "設定" }
 ];
 

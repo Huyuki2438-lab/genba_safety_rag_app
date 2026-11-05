@@ -23,6 +23,7 @@ class AnalysisHistoryEntry(BaseModel):
 
 
 class CreateAnalysisHistoryRequest(BaseModel):
+    requestId: str | None = Field(default=None, max_length=36)
     imageName: str = Field(min_length=1, max_length=500)
     imageMimeType: str | None = Field(default=None, max_length=100)
     imageBase64: str = Field(min_length=1)

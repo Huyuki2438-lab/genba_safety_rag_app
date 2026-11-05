@@ -35,7 +35,7 @@ export const useGeminiSafetyAnalysis = () => {
         mainRisk: metadata.mainRisk
       });
       setAnalysisMarkdown(result.markdown);
-      const saveInput: CreateHistoryInput = { imageName: selectedImage.name || "現場写真", imageMimeType: getImageMimeType(selectedImage), imageBase64: await fileToBase64(selectedImage), mode: AI_MODE, providerDisplayLabel: AI_PROVIDER_LABEL, model: result.usedModel, markdown: result.markdown, ...metadata };
+      const saveInput: CreateHistoryInput = { requestId: result.requestId, imageName: selectedImage.name || "現場写真", imageMimeType: getImageMimeType(selectedImage), imageBase64: await fileToBase64(selectedImage), mode: AI_MODE, providerDisplayLabel: AI_PROVIDER_LABEL, model: result.usedModel, markdown: result.markdown, ...metadata };
       setPendingSave(saveInput);
       const saved = await createAnalysisHistory(saveInput);
       setPendingSave(null);

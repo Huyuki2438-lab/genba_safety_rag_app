@@ -17,6 +17,7 @@ export type AnalyzeImageSafetyInput = {
 export type AnalyzeImageSafetyResult = {
   markdown: string;
   usedModel: string;
+  requestId?: string;
 };
 
 export type AnalysisHistoryEntry = {

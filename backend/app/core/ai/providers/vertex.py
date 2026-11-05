@@ -49,4 +49,16 @@ class VertexProvider(AIBase):
         }
 
         response_json = self._post_json(url, payload, {"x-goog-api-key": self.api_key})
-        return self._extract_response(response_json)
+        try:
+            return self._extract_response(response_json)
+        except Exception as exc:
+            if hasattr(exc, "usage_metadata"):
+                usage_metadata = response_json.get("usageMetadata")
+                exc.usage_metadata = usage_metadata if isinstance(usage_metadata, dict) else {}
+                exc.response_id = response_json.get("responseId") if isinstance(response_json.get("responseId"), str) else None
+                exc.model_version = response_json.get("modelVersion") if isinstance(response_json.get("modelVersion"), str) else None
+                candidates = response_json.get("candidates")
+                candidate = candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], dict) else {}
+                reason = candidate.get("finishReason")
+                exc.status = reason.strip().lower() if isinstance(reason, str) and reason.strip() else "response_error"
+            raise

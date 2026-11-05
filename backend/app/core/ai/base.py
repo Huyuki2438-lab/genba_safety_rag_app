@@ -12,7 +12,23 @@ if TYPE_CHECKING:
 
 class UpstreamExecutionError(RuntimeError):
     """AI model call failure error."""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: str = "upstream_error",
+        http_status: int | None = None,
+        response_id: str | None = None,
+        model_version: str | None = None,
+        usage_metadata: dict[str, Any] | None = None,
+    ):
+        super().__init__(message)
+        self.status = status
+        self.http_status = http_status
+        self.response_id = response_id
+        self.model_version = model_version
+        self.usage_metadata = usage_metadata if isinstance(usage_metadata, dict) else {}
 
 
 @dataclass(frozen=True)
@@ -54,9 +70,27 @@ class AIBase(ABC):
                 raw = resp.read().decode("utf-8", errors="ignore")
                 return json.loads(raw) if raw else {}
         except error.HTTPError as exc:
-            raise UpstreamExecutionError(f"AIサービスへの接続に失敗しました（HTTP {exc.code}）。管理者へ連絡してください。") from None
+            response_json: dict[str, Any] = {}
+            try:
+                raw = exc.read().decode("utf-8", errors="ignore")
+                parsed = json.loads(raw) if raw else {}
+                response_json = parsed if isinstance(parsed, dict) else {}
+            except (OSError, ValueError, TypeError):
+                pass
+            usage_metadata = response_json.get("usageMetadata")
+            raise UpstreamExecutionError(
+                f"AIサービスへの接続に失敗しました（HTTP {exc.code}）。管理者へ連絡してください。",
+                status="http_error",
+                http_status=exc.code,
+                response_id=response_json.get("responseId") if isinstance(response_json.get("responseId"), str) else None,
+                model_version=response_json.get("modelVersion") if isinstance(response_json.get("modelVersion"), str) else None,
+                usage_metadata=usage_metadata if isinstance(usage_metadata, dict) else None,
+            ) from None
         except Exception:
-            raise UpstreamExecutionError("AIサービスに接続できません。インターネット接続を確認して再試行してください。") from None
+            raise UpstreamExecutionError(
+                "AIサービスに接続できません。インターネット接続を確認して再試行してください。",
+                status="communication_error",
+            ) from None
 
     def _extract_response(self, response_json: dict) -> AIResponse:
         """Validate and extract the common Gemini / Vertex response format."""

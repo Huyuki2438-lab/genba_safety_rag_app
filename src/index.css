@@ -1035,7 +1035,74 @@ body {
 }
 .history-filters h2 { font-size: 1.2rem; font-weight: 800; }
 
+.usage-page { display: grid; gap: 18px; width: 100%; }
+.usage-section {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.usage-section h1, .usage-section h2, .usage-section p { margin-top: 0; }
+.usage-heading { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+.usage-heading p { margin-bottom: 0; color: var(--text-muted); }
+.usage-rate {
+  min-width: 310px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-muted);
+  font-size: .9rem;
+}
+.usage-rate small { color: var(--text-muted); }
+.usage-rate-input { display: flex; align-items: center; gap: 8px; }
+.usage-rate-input input {
+  min-width: 0;
+  width: 140px;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: right;
+}
+.usage-rate-input input:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.usage-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.usage-summary > div {
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.usage-summary span, .usage-summary small { color: var(--text-muted); }
+.usage-summary strong { font-size: 1.25rem; overflow-wrap: anywhere; }
+.usage-warning { padding: 12px; border-radius: 8px; background: #fff7ed; color: #9a3412; }
+.usage-note { padding: 10px 12px; border-radius: 8px; background: var(--surface-muted); }
+.usage-aggregates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.usage-aggregates .usage-section { min-width: 0; }
+.usage-detail-table { min-width: 1320px; }
+.usage-breakdown-table { min-width: 620px; }
+.filter-grid select {
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  font: inherit;
+}
+
 @media (max-width: 640px) {
   .settings-card { padding: 16px; }
   .settings-card .page-actions > button { width: 100%; }
+  .usage-heading { display: grid; }
+  .usage-rate { min-width: 0; }
+  .usage-summary, .usage-aggregates { grid-template-columns: 1fr; }
 }

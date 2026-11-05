@@ -44,13 +44,21 @@ const normalizeResultFromAnalyzeResponse = (
     "markdown" in data ? (data as { markdown?: unknown }).markdown : undefined;
   const directModel =
     "used_model" in data ? (data as { used_model?: unknown }).used_model : undefined;
-
-  if (typeof directMarkdown === "string" && typeof directModel === "string") {
-    return { markdown: directMarkdown.trim(), usedModel: directModel };
-  }
-
   const nestedResult =
     "result" in data ? (data as { result?: unknown }).result : undefined;
+  const requestId =
+    nestedResult && typeof nestedResult === "object" && "id" in nestedResult
+      ? (nestedResult as { id?: unknown }).id
+      : undefined;
+
+  if (typeof directMarkdown === "string" && typeof directModel === "string") {
+    return {
+      markdown: directMarkdown.trim(),
+      usedModel: directModel,
+      requestId: typeof requestId === "string" ? requestId : undefined
+    };
+  }
+
   if (!nestedResult || typeof nestedResult !== "object") return null;
 
   const nestedMarkdown =
@@ -63,7 +71,11 @@ const normalizeResultFromAnalyzeResponse = (
       : undefined;
   if (typeof nestedMarkdown !== "string" || typeof nestedModel !== "string") return null;
 
-  return { markdown: nestedMarkdown.trim(), usedModel: nestedModel };
+  return {
+    markdown: nestedMarkdown.trim(),
+    usedModel: nestedModel,
+    requestId: typeof requestId === "string" ? requestId : undefined
+  };
 };
 
 const callSafetyAnalyzeApi = async ({

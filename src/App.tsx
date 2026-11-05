@@ -7,6 +7,7 @@ import { ImageUploadPanel } from "./components/ImageUploadPanel";
 import { ResultTabs, ResultToolbar } from "./components/ResultTabs";
 import { HistoryView } from "./components/HistoryView";
 import { SettingsView } from "./components/SettingsView";
+import { UsageManagementView } from "./components/UsageManagementView";
 import { SetupWizard } from "./components/SetupWizard";
 import { StorageUnavailableScreen } from "./components/StorageUnavailableScreen";
 import { EXCEL_ENDPOINT, PDF_ENDPOINT } from "./constants/endpoints";
@@ -73,10 +74,11 @@ type ReportExportData = {
   createdBy: string;
 };
 
-const HASH_BY_PAGE: Record<AppPage, string> = { create: "#/", history: "#/history", settings: "#/settings" };
+const HASH_BY_PAGE: Record<AppPage, string> = { create: "#/", history: "#/history", usage: "#/usage", settings: "#/settings" };
 
 const pageFromHash = (): AppPage => {
   if (window.location.hash === HASH_BY_PAGE.history) return "history";
+  if (window.location.hash === HASH_BY_PAGE.usage) return "usage";
   if (window.location.hash === HASH_BY_PAGE.settings) return "settings";
   return "create";
 };
@@ -311,6 +313,17 @@ function App() {
         <Header activePage="history" onNavigate={navigate} />
         <main className="app-main">
           <HistoryView onOpenKy={() => navigate("create")} onSelect={handleSelectHistory} onSaveAsPdf={generatePdf} onSaveAsExcel={generateExcel} isSavingPdf={isSavingPdf} isSavingExcel={isSavingExcel} />
+        </main>
+      </div>
+    );
+  }
+
+  if (page === "usage") {
+    return (
+      <div className="app-shell">
+        <Header activePage="usage" onNavigate={navigate} />
+        <main className="app-main">
+          <UsageManagementView />
         </main>
       </div>
     );

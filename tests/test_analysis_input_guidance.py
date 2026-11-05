@@ -139,7 +139,7 @@ class AnalysisInputGuidanceTests(unittest.TestCase):
                 captured.update(kwargs)
                 return AIResponse(text=FIVE_RISK_MARKDOWN, model_version="mock-model", finish_reason="STOP")
 
-        service = AnalysisService()
+        service = AnalysisService(usage_repo=type("UsageRepo", (), {"add": lambda self, record: record})())
         service.ai_factory = type("Factory", (), {"get_provider": lambda self: Provider()})()
         request = AnalyzeSafetyRequest(
             image_base64="aW1hZ2U=",

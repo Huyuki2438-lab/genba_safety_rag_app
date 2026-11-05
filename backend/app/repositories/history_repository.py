@@ -40,7 +40,7 @@ class HistoryRepository:
     def initialize_schema(self):
         require_root(self.root)
         try:
-            for folder in ("records", "images", "reports", "export"):
+            for folder in ("records", "images", "reports", "export", "usage"):
                 (self.root / folder).mkdir(exist_ok=True)
         except OSError as exc:
             raise HistoryStorageUnavailable(

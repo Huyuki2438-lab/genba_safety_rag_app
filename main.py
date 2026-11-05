@@ -42,7 +42,7 @@ def create_app():
         origin = request.headers.get("origin")
         if origin and urlsplit(origin).netloc != request.headers.get("host"):
             return JSONResponse({"detail": "接続元を確認してください。"}, status_code=403)
-        if request.method == "POST" and not request.headers.get("content-type", "").startswith("application/json"):
+        if request.method in {"POST", "PUT", "PATCH"} and not request.headers.get("content-type", "").startswith("application/json"):
             return JSONResponse({"detail": "入力形式を確認してください。"}, status_code=415)
         return await call_next(request)
     @app.exception_handler(RequestValidationError)

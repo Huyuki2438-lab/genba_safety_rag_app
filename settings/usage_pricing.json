@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "prices": [
+    {
+      "model": "gemini-2.5-flash",
+      "aliases": [],
+      "pricing_effective_date": "2025-06-17",
+      "traffic_type": "ON_DEMAND",
+      "accepted_input_modalities": ["TEXT", "IMAGE", "VIDEO"],
+      "tiers": [
+        {"max_input_tokens": 200000, "input_usd_per_million_tokens": "0.30", "output_usd_per_million_tokens": "2.50", "thoughts_usd_per_million_tokens": "2.50", "cached_input_usd_per_million_tokens": "0.03"},
+        {"max_input_tokens": null, "input_usd_per_million_tokens": "0.30", "output_usd_per_million_tokens": "2.50", "thoughts_usd_per_million_tokens": "2.50", "cached_input_usd_per_million_tokens": "0.03"}
+      ],
+      "source_url": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
+      "note": "Standard Pay-as-you-go; image=input; thinking=output"
+    },
+    {
+      "model": "gemini-3.7-flash",
+      "aliases": [],
+      "pricing_effective_date": "2026-08-13",
+      "traffic_type": "ON_DEMAND",
+      "accepted_input_modalities": ["TEXT", "IMAGE", "VIDEO", "AUDIO"],
+      "tiers": [
+        {"max_input_tokens": 200000, "input_usd_per_million_tokens": "0.75", "output_usd_per_million_tokens": "3.75", "thoughts_usd_per_million_tokens": "3.75", "cached_input_usd_per_million_tokens": "0.075"},
+        {"max_input_tokens": null, "input_usd_per_million_tokens": "0.75", "output_usd_per_million_tokens": "3.75", "thoughts_usd_per_million_tokens": "3.75", "cached_input_usd_per_million_tokens": "0.075"}
+      ],
+      "source_url": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
+      "note": "Global Standard Pay-as-you-go through 2026-12-31; response and reasoning use the output rate"
+    },
+    {
+      "model": "gemini-3.7-flash",
+      "aliases": [],
+      "pricing_effective_date": "2027-01-01",
+      "traffic_type": "ON_DEMAND",
+      "accepted_input_modalities": ["TEXT", "IMAGE", "VIDEO", "AUDIO"],
+      "tiers": [
+        {"max_input_tokens": 200000, "input_usd_per_million_tokens": "1.50", "output_usd_per_million_tokens": "7.50", "thoughts_usd_per_million_tokens": "7.50", "cached_input_usd_per_million_tokens": "0.15"},
+        {"max_input_tokens": null, "input_usd_per_million_tokens": "1.50", "output_usd_per_million_tokens": "7.50", "thoughts_usd_per_million_tokens": "7.50", "cached_input_usd_per_million_tokens": "0.15"}
+      ],
+      "source_url": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
+      "note": "Global Standard Pay-as-you-go starting 2027-01-01; response and reasoning use the output rate"
+    }
+  ],
+  "exchange_rates": [{
+    "exchange_rate_effective_date": "2025-06-17",
+    "jpy_per_usd": null,
+    "source": "Set the approved operational rate and its source"
+  }]
+}

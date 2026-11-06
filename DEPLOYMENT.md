@@ -3,7 +3,7 @@
 現行の配布方式はこの文書ではなく、`scripts/package_distribution.py` が生成する `dist/` 配下の資料が正になります。
 
 - `dist/01_NASへ配置/` … NAS側に置くデータ保管フォルダ一式（工事フォルダ直下の `{export,images,records,reports,usage}` と `.ky_site.json`）
-- `dist/02_各PCへ配置/` … 各PCへ配るEXE・`config.json`・`secrets.env`
+- `dist/02_各PCへ配置/` … 各PCへ配るEXE・`config.json`・`secrets.env`・アプリ共通の`settings/usage_pricing.json`
 - `dist/04_管理者向け資料/` … 導入手順・新規現場追加手順・アップデート手順・バックアップ手順・トラブル対応・AIプロンプト参考コピー
 
 導入・更新・新規現場追加・障害対応の具体的な手順は、上記 `dist/04_管理者向け資料/` 内の各txtを参照してください。
@@ -12,6 +12,7 @@
 
 - 履歴はSQLiteではなく、**工事フォルダ直下の per-record JSONファイル**（`records/YYYY-MM/<uuid>.json`）で管理します。写真は同じ工事フォルダ直下の `images/` 配下です。旧SQLite方式（`DATABASE_URL`、`scripts/initialize_postgres.py` 等）は廃止済みです。
 - 共有先（NASのUNCパス）は各PCの **`config.json`**（`project_id`・`project_name`・`data_root`）で指定します。`.env` の `DATABASE_URL`/`PHOTO_STORAGE_DIR` は現在の配布物には存在しません。
+- 料金単価は各PCのEXE配置フォルダ直下の **`settings/usage_pricing.json`** で管理し、工事別の利用台帳は従来どおり **`data_root/usage/YYYY-MM/`** に保存します。共通設定が無い場合だけ、互換性のため現在の工事フォルダ内にある既存の `settings/usage_pricing.json` を読み取ります。複数ファイルの自動統合・削除・上書きは行いません。
 - AI呼び出しはVertex AI（Gemini Flash）に一本化されています。認証情報は各PCの `secrets.env`（`VERTEX_API_KEY`・`GEMINI_MODEL`・`GOOGLE_CLOUD_PROJECT`・`GOOGLE_CLOUD_LOCATION`）で管理し、NASや`config.json`には置きません。
 - 配布パッケージの作成は `scripts/package_distribution.py` を実行します（開発担当者用）。
 

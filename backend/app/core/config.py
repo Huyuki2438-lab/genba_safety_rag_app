@@ -129,6 +129,9 @@ else:
 class Settings(BaseSettings):
     # Base Path (genba_safety_rag_app/)
     BASE_DIR: Path = BASE_DIR
+    # Runtime files shipped beside the EXE live here.  This deliberately stays
+    # independent from DATA_DIR, which points at the currently selected site.
+    APP_DIR: Path = APP_DIR
 
     PROJECT_ID: str = PROJECT.get("project_id", "development")
     PROJECT_NAME: str = PROJECT.get("project_name", "開発用現場")

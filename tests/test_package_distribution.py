@@ -3,7 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.package_distribution import SITE_FOLDERS, create_site_structure, default_config
+from scripts.package_distribution import (
+    SITE_FOLDERS, create_site_structure, default_config, install_pricing_config,
+)
 
 
 class PackageDistributionStructureTests(unittest.TestCase):
@@ -51,6 +53,30 @@ class PackageDistributionStructureTests(unittest.TestCase):
             create_site_structure(project, "001", "テスト工事")
 
             self.assertEqual(json.loads(marker_path.read_text(encoding="utf-8")), existing)
+
+    def test_pricing_config_is_installed_beside_exe(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.json"
+            source.write_text('{"schema_version": 1}', encoding="utf-8")
+
+            target = install_pricing_config(root / "pc", source)
+
+            self.assertEqual(target, root / "pc" / "settings" / "usage_pricing.json")
+            self.assertEqual(target.read_bytes(), source.read_bytes())
+
+    def test_existing_pricing_config_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.json"
+            source.write_text('{"source": true}', encoding="utf-8")
+            target = root / "pc" / "settings" / "usage_pricing.json"
+            target.parent.mkdir(parents=True)
+            target.write_text('{"existing": true}', encoding="utf-8")
+
+            install_pricing_config(root / "pc", source)
+
+            self.assertEqual(target.read_text(encoding="utf-8"), '{"existing": true}')
 
 
 if __name__ == "__main__":

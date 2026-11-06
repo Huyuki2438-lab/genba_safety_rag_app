@@ -84,6 +84,12 @@ body {
 .app-header .app-navigation {
   margin-top: 6px;
   gap: 8px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.app-header .nav-button--usage {
+  margin-left: auto;
 }
 
 .nav-button, .compact, .delete-button {

@@ -129,6 +129,31 @@ class UsageServiceTests(unittest.TestCase):
         self.assertIsNone(summary.estimated_cost_jpy_total)
         self.assertEqual(summary.jpy_unavailable_count, 1)
 
+    def test_missing_pricing_keeps_ledger_visible_as_unpriced(self):
+        path = self.root / "settings" / "usage_pricing.json"
+        path.unlink()
+        record = self.add(datetime(2025, 1, 2, tzinfo=timezone.utc))
+
+        result = self.query()
+
+        self.assertEqual(result.summary.call_count, 1)
+        self.assertEqual(result.details[0].usage_id, record.usage_id)
+        self.assertEqual(result.details[0].pricing_status, "unavailable")
+        self.assertIsNone(result.details[0].estimated_cost_usd)
+        self.assertFalse(path.exists())
+
+    def test_corrupt_pricing_is_preserved_and_ledger_remains_visible(self):
+        path = self.root / "settings" / "usage_pricing.json"
+        path.write_text("{broken", encoding="utf-8")
+        before = path.read_bytes()
+        self.add(datetime(2025, 1, 2, tzinfo=timezone.utc))
+
+        result = self.query()
+
+        self.assertEqual(result.summary.call_count, 1)
+        self.assertEqual(result.details[0].pricing_status, "unavailable")
+        self.assertEqual(path.read_bytes(), before)
+
     def test_duplicate_usage_id_is_not_counted_twice(self):
         record = self.add(datetime(2025, 1, 2, tzinfo=timezone.utc))
         source = self.root / "usage" / "2025-01" / f"{record.usage_id}.json"

@@ -14,6 +14,7 @@ MANUAL_DIST = DIST / "03_マニュアル"
 DOCS = DIST / "04_管理者向け資料"
 PROMPTS_SRC = ROOT / "backend" / "app" / "core" / "prompts" / "templates"
 PROMPTS_DIST = DOCS / "AIプロンプト"
+PRICING_SRC = ROOT / "settings" / "usage_pricing.json"
 NAS_UNC_ROOT = r"I:\マイドライブ\KY安全管理"
 SITE_FOLDERS = ("export", "images", "records", "reports", "usage")
 DEFAULT_DATA_ROOT = NAS_UNC_ROOT + r"\001_芝原改良工事"
@@ -43,6 +44,17 @@ def default_config():
         "data_root": DEFAULT_DATA_ROOT,
     }
 
+def install_pricing_config(pc_dir, source=PRICING_SRC):
+    """Install the app-wide pricing file without replacing an existing one."""
+    source = Path(source)
+    if not source.is_file():
+        raise FileNotFoundError(f"Pricing settings not found: {source}")
+    target = Path(pc_dir) / "settings" / "usage_pricing.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists():
+        shutil.copy2(source, target)
+    return target
+
 def main():
     env = {**dotenv_values(ROOT / ".env"), **{k: v for k, v in os.environ.items() if k.startswith(("VERTEX_", "GEMINI_", "GOOGLE_CLOUD_"))}}
     key = env.get("VERTEX_API_KEY")
@@ -60,6 +72,7 @@ def main():
     create_site_structure(NAS / "template_project")
     PC.mkdir(parents=True, exist_ok=True)
     shutil.copy2(binary, PC / binary.name)
+    install_pricing_config(PC)
     # Reference copy of the prompts sent to Vertex AI, for admin review (EXE already embeds these).
     if PROMPTS_DIST.exists():
         shutil.rmtree(PROMPTS_DIST)
@@ -115,7 +128,7 @@ NAS交換時は全員終了→フォルダ全体コピー→権限再設定→�
    初期値：I:\\マイドライブ\\KY安全管理\\001_芝原改良工事
    data_rootにはdataフォルダではなく、工事フォルダそのものを指定します。
    NAS名・共有名・現場フォルダが異なる場合は配布前に変更が必要です。
-3. このPC用フォルダ（EXE、config.json、secrets.env、README.txtの4ファイル）を各PCへコピーします。
+3. このPC用フォルダ（EXE、config.json、secrets.env、settings、README.txt）を各PCへコピーします。
 4. EXEをダブルクリック。写真→分析→履歴→PDF保存→別PCで同じ履歴・写真・PDFを確認します。
 5. 両PCから同時に保存し、履歴が2件増えることを確認します。実NASでこの受入確認を行ってください。
 6. ウィンドウ右上の「×」で終了します。同一PCで再度EXEを起動すると、既存のアプリウィンドウが前面に表示されます。
@@ -139,7 +152,7 @@ NAS上のEXEからの直接実行は拒否します。ネットワークドラ�
     write(DOCS / "アップデート手順.txt", """
 【更新】
 1. 全PCでアプリウィンドウ右上の「×」で終了します。NASの現場データをバックアップします。
-2. 各PCのconfig.jsonとsecrets.envを保持し、KY安全管理.exeだけを新しいものに差し替えます。
+2. 各PCのconfig.json・secrets.env・settingsを保持し、KY安全管理.exeだけを新しいものに差し替えます。
 3. NAS側の現場フォルダは変更しません。01_NASへ配置を既存データへ上書きしないでください。
 4. 既存履歴、写真、PDFが読めることと、新規保存を確認します。
 5. 問題があればEXEだけを前の版へ戻します。データ形式はschema_version=1です。
@@ -181,7 +194,7 @@ NAS復旧後は履歴の検索ボタンで再読込します。アプリはロ�
 【PDF失敗】
 Microsoft Edgeがインストールされ起動できること、会社の実行制限、NASの権限・容量を確認します。
 【起動・二重起動・終了】
-EXE・config.json・secrets.envをローカルPCの同じフォルダへ置きます。
+EXE・config.json・secrets.env・settingsフォルダをローカルPCの同じ配布フォルダへ置きます。
 既に起動中なら、既存のアプリウィンドウが前面に表示されます。
 終了はウィンドウ右上の「×」です。処理中に閉じた場合は、サーバーが進行中の処理を完了させてから終了します。
 【NAS移設】

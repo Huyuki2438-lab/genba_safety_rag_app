@@ -10,10 +10,12 @@ from uuid import uuid4
 
 from backend.app.repositories.usage_repository import build_usage_record
 from backend.app.services.pricing_service import (
+    PricingConfigurationError,
     PricingService,
     UsagePricingConfig,
     load_pricing_config,
     load_usage_ledger,
+    resolve_pricing_config_path,
 )
 
 
@@ -189,6 +191,64 @@ class PricingServiceTests(unittest.TestCase):
             self.assertEqual(loaded.usage_id, record.usage_id)
             self.assertEqual(result.pricing_status, "estimated")
             self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+
+class PricingConfigPathTests(unittest.TestCase):
+    def test_app_wide_file_is_independent_of_project_switch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            app_dir = root / "app"
+            project_a = root / "project-a"
+            project_b = root / "project-b"
+            app_file = app_dir / "settings" / "usage_pricing.json"
+            app_file.parent.mkdir(parents=True)
+            app_file.write_text("{}", encoding="utf-8")
+
+            self.assertEqual(resolve_pricing_config_path(app_dir, project_a), app_file)
+            self.assertEqual(resolve_pricing_config_path(app_dir, project_b), app_file)
+
+    def test_existing_site_local_file_is_legacy_fallback_only(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            legacy = root / "project" / "settings" / "usage_pricing.json"
+            legacy.parent.mkdir(parents=True)
+            legacy.write_text("legacy", encoding="utf-8")
+
+            selected = resolve_pricing_config_path(root / "app", root / "project")
+
+            self.assertEqual(selected, legacy)
+            self.assertEqual(legacy.read_text(encoding="utf-8"), "legacy")
+
+    def test_missing_files_return_app_path_without_creating_anything(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            expected = root / "app" / "settings" / "usage_pricing.json"
+
+            selected = resolve_pricing_config_path(root / "app", root / "project")
+
+            self.assertEqual(selected, expected)
+            self.assertFalse(expected.exists())
+            with self.assertRaises(PricingConfigurationError):
+                load_pricing_config(selected)
+
+    def test_corrupt_app_file_is_not_hidden_or_overwritten_by_legacy_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            app_file = root / "app" / "settings" / "usage_pricing.json"
+            legacy = root / "project" / "settings" / "usage_pricing.json"
+            app_file.parent.mkdir(parents=True)
+            legacy.parent.mkdir(parents=True)
+            app_file.write_text("{broken", encoding="utf-8")
+            legacy.write_text("{}", encoding="utf-8")
+            before = app_file.read_bytes()
+
+            selected = resolve_pricing_config_path(root / "app", root / "project")
+
+            self.assertEqual(selected, app_file)
+            with self.assertRaises(PricingConfigurationError):
+                load_pricing_config(selected)
+            self.assertEqual(app_file.read_bytes(), before)
+            self.assertTrue(legacy.exists())
 
 
 class Gemini37FlashPricingTests(unittest.TestCase):

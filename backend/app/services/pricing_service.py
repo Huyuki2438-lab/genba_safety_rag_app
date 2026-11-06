@@ -196,9 +196,28 @@ def load_usage_ledger(path: Path) -> APIUsageRecord:
         raise PricingConfigurationError(f"API利用台帳を読み込めません: {path} ({exc})") from None
 
 
+def resolve_pricing_config_path(app_dir: Path, data_dir: Path) -> Path:
+    """Choose the app-wide price file, with read-only legacy compatibility.
+
+    A site-local file is considered only when the app-wide file is absent.  We
+    never copy, merge, delete, or repair either file here: in particular, a
+    corrupt app-wide file must remain visible as an error instead of being
+    silently hidden by another site's settings.
+    """
+    app_wide = Path(app_dir) / "settings" / "usage_pricing.json"
+    legacy_site_local = Path(data_dir) / "settings" / "usage_pricing.json"
+    if app_wide.is_file():
+        return app_wide
+    if legacy_site_local.is_file():
+        return legacy_site_local
+    return app_wide
+
+
 class PricingService:
     def __init__(self, config: UsagePricingConfig | None = None, config_path: Path | None = None):
-        self.config_path = config_path or settings.DATA_DIR / "settings" / "usage_pricing.json"
+        self.config_path = config_path or resolve_pricing_config_path(
+            settings.APP_DIR, settings.DATA_DIR
+        )
         self._config = config
 
     @property

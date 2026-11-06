@@ -3,8 +3,8 @@ export type AppPage = "create" | "history" | "usage" | "settings";
 const TABS: { page: AppPage; label: string }[] = [
   { page: "create", label: "KY作成" },
   { page: "history", label: "履歴" },
-  { page: "usage", label: "利用料金管理" },
-  { page: "settings", label: "設定" }
+  { page: "settings", label: "設定" },
+  { page: "usage", label: "利用料金管理" }
 ];
 
 type AppNavigationProps = {
@@ -19,7 +19,7 @@ export function AppNavigation({ activePage, onNavigate }: AppNavigationProps) {
         <button
           key={page}
           type="button"
-          className={`nav-button${page === activePage ? " is-active" : ""}`}
+          className={`nav-button${page === "usage" ? " nav-button--usage" : ""}${page === activePage ? " is-active" : ""}`}
           aria-current={page === activePage ? "page" : undefined}
           onClick={() => onNavigate(page)}
         >

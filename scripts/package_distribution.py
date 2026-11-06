@@ -15,10 +15,33 @@ DOCS = DIST / "04_管理者向け資料"
 PROMPTS_SRC = ROOT / "backend" / "app" / "core" / "prompts" / "templates"
 PROMPTS_DIST = DOCS / "AIプロンプト"
 NAS_UNC_ROOT = r"I:\マイドライブ\KY安全管理"
+SITE_FOLDERS = ("export", "images", "records", "reports", "usage")
+DEFAULT_DATA_ROOT = NAS_UNC_ROOT + r"\001_芝原改良工事"
 
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text.strip() + "\n", encoding="utf-8-sig")
+
+def create_site_structure(path, project_id=None, project_name=None):
+    """Create a new distribution skeleton without nesting it under data/."""
+    for folder in SITE_FOLDERS:
+        (path / folder).mkdir(parents=True, exist_ok=True)
+    if project_id:
+        marker = json.dumps(
+            {"project_id": project_id, "project_name": project_name or ""},
+            ensure_ascii=False,
+            indent=2,
+        ) + "\n"
+        marker_path = path / ".ky_site.json"
+        if not marker_path.exists():
+            marker_path.write_text(marker, encoding="utf-8")
+
+def default_config():
+    return {
+        "project_id": "001",
+        "project_name": "芝原改良工事",
+        "data_root": DEFAULT_DATA_ROOT,
+    }
 
 def main():
     env = {**dotenv_values(ROOT / ".env"), **{k: v for k, v in os.environ.items() if k.startswith(("VERTEX_", "GEMINI_", "GOOGLE_CLOUD_"))}}
@@ -32,9 +55,9 @@ def main():
         raise SystemExit("Build EXE first")
     if not PROMPTS_SRC.is_dir():
         raise SystemExit("Gemini prompt templates not found")
-    for project in ("001_芝原改良工事", "template_project"):
-        for folder in ("records", "images", "reports", "export"):
-            (NAS / project / "data" / folder).mkdir(parents=True, exist_ok=True)
+    create_site_structure(NAS / "001_芝原改良工事", "001", "芝原改良工事")
+    # The template has no marker because its site ID/name are assigned after it is copied.
+    create_site_structure(NAS / "template_project")
     PC.mkdir(parents=True, exist_ok=True)
     shutil.copy2(binary, PC / binary.name)
     # Reference copy of the prompts sent to Vertex AI, for admin review (EXE already embeds these).
@@ -51,8 +74,7 @@ def main():
     shutil.copy2(manual, MANUAL_DIST / manual.name)
     # Preserve per-site configuration on subsequent builds.
     if not (PC / "config.json").exists():
-        write(PC / "config.json", json.dumps({"project_id": "001", "project_name": "芝原改良工事",
-            "data_root": NAS_UNC_ROOT + r"\001_芝原改良工事\data"}, ensure_ascii=False, indent=2))
+        write(PC / "config.json", json.dumps(default_config(), ensure_ascii=False, indent=2))
     secret = "VERTEX_API_KEY=" + key + "\n"
     for name in ("GEMINI_MODEL", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
         if env.get(name):
@@ -75,12 +97,12 @@ APIキーは設定済みです。通常、設定変更は不要です。フォ�
 01_NASへ配置内の各現場フォルダ（001_芝原改良工事等）を次のフォルダの直下へ配置します。
 例：I:\\マイドライブ\\KY安全管理
 NASはデータ保管だけを担当します。EXE、secrets.env、APIキー、ログは置きません。
-利用者には各現場のdata以下で一覧表示・読み取り・作成・書き込み・名前変更・削除の権限が必要です。
+利用者には各工事フォルダ直下で一覧表示・読み取り・作成・書き込み・名前変更・削除の権限が必要です。
 新しい現場はtemplate_projectをコピーして「002_○○工事」等へ改名します。
 各PCのconfig.jsonのproject_id、project_name、data_rootをその現場に合わせ、アプリを再起動します。
 project_idは途中変更しないでください。違うIDの履歴は混在防止のため表示されません。
 現場削除は全員のアプリを終了し、バックアップと保存期間を確認して管理者が行ってください。
-バックアップ対象は現場フォルダ全体（records/images/reports/exportと削除印）です。
+バックアップ対象は工事フォルダ全体（export/images/records/reports/usage、.ky_site.jsonと削除印）です。
 NAS交換時は全員終了→フォルダ全体コピー→権限再設定→各PCのdata_root変更→履歴・写真・PDF確認。
 既存現場へ空テンプレートを上書きする更新は行わないでください。
 同じフォルダ内の一時ファイルから正式ファイルへのrenameで公開します。SMB/NASの永続化保証は機種・設定に依存します。
@@ -90,7 +112,8 @@ NAS交換時は全員終了→フォルダ全体コピー→権限再設定→�
 【初回導入】
 1. 01_NASへ配置内の各現場フォルダをNASの保存先フォルダ直下へコピーし、共有名と権限を設定します。
 2. 02_各PCへ配置のconfig.jsonを実際のUNCパスに合わせます。APIキーはsecrets.envに設定済みです。
-   初期値：I:\\マイドライブ\\KY安全管理\\001_芝原改良工事\\data
+   初期値：I:\\マイドライブ\\KY安全管理\\001_芝原改良工事
+   data_rootにはdataフォルダではなく、工事フォルダそのものを指定します。
    NAS名・共有名・現場フォルダが異なる場合は配布前に変更が必要です。
 3. このPC用フォルダ（EXE、config.json、secrets.env、README.txtの4ファイル）を各PCへコピーします。
 4. EXEをダブルクリック。写真→分析→履歴→PDF保存→別PCで同じ履歴・写真・PDFを確認します。
@@ -106,7 +129,8 @@ NAS上のEXEからの直接実行は拒否します。ネットワークドラ�
 【新規現場】
 1. NASのtemplate_projectをコピーし「002_○○工事」などへ改名します。
 2. PC用フォルダを用意し、config.jsonをメモ帳で変更してUTF-8で保存します。
-   project_id：002など一意のID、project_name：工事名、data_root：現場/dataへの絶対UNCパス。
+   project_id：002など一意のID、project_name：工事名、data_root：工事フォルダそのものの絶対UNCパス。
+   data_rootの末尾にdataを付けません。既存のdata方式の設定は自動変更・移行しません。
    JSON内のバックスラッシュは2個ずつ記載します。APIキーはconfig.jsonへ書きません。
 3. 同じ現場を使う全PCへ、同じ3項目のconfig.jsonを配布します。EXEは全現場共通です。
 4. EXE起動後、現場名と履歴を確認します。設定変更時はアプリを終了して再起動します。

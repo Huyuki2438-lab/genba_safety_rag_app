@@ -39,6 +39,7 @@ export function SettingsView() {
             initialProjectId={status?.projectId ?? null}
             initialProjectName={status?.projectName ?? null}
             initialStorageType={status?.storageType ?? null}
+            projectIdLocked={status?.projectIdLocked ?? false}
           />
         )}
       </section>

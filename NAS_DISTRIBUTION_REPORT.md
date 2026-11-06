@@ -55,16 +55,19 @@ dist\02_各PCへ配置
 
 ```text
 KY安全管理/
-  001_芝原改良工事/data/
-    records/年月/UUID.json
+  001_芝原改良工事/
+    export/
     images/migrated/UUID.<画像拡張子>
+    records/年月/UUID.json
     reports/履歴UUID/PDFのUUID.pdf
+    usage/
+    .ky_site.json
+  template_project/
     export/
-  template_project/data/
-    records/
     images/
+    records/
     reports/
-    export/
+    usage/
   README_NAS.txt
 ```
 
@@ -88,11 +91,11 @@ KY安全管理/
 {
   "project_id": "001",
   "project_name": "芝原改良工事",
-  "data_root": "\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理\\001_芝原改良工事\\data"
+  "data_root": "\\\\landisk-87a5d6\\disk1\\KY検出システムデータ\\KY安全管理\\001_芝原改良工事"
 }
 ```
 
-EXE横からUTF-8で読み込みます。絶対パスを必須にし、3項目以外を拒否します。変更後はアプリを終了して再起動してください。
+EXE横からUTF-8で読み込みます。`data_root` には `data` フォルダではなく、工事フォルダそのものを指定します。絶対パスを必須にし、3項目以外を拒否します。変更後はアプリを終了して再起動してください。既存の `data/` 方式の設定は自動変更・移行しません。
 
 10. secrets.env
 
@@ -114,7 +117,7 @@ NASのtemplate_projectをコピー・改名し、各PCのconfig.jsonの3項目�
 
 14. バックアップ
 
-各現場フォルダ全体をNASの世代バックアップ・別媒体へ保存します。recordsだけでなくimages、reports、export、.deleted印も対象です。整合したコピーを取るときは全PCを終了してください。secrets.envはNASに置かず会社の管理者用保管場所で別管理します。
+各工事フォルダ全体をNASの世代バックアップ・別媒体へ保存します。recordsだけでなくimages、reports、export、usage、.ky_site.json、.deleted印も対象です。整合したコピーを取るときは全PCを終了してください。secrets.envはNASに置かず会社の管理者用保管場所で別管理します。
 
 15. NAS障害時の挙動
 

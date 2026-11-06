@@ -113,9 +113,14 @@ def _ensure_directory(path: Path) -> None:
     UNCパスは共有名(\\サーバー\共有)自体が存在しない場合に作成を試みない
     (NAS未接続・共有名の誤りを、誤ったフォルダの自動作成で隠さないため)。
     """
-    if path.is_dir():
-        return
     network = _is_network_path(path)
+    try:
+        if path.is_dir():
+            return
+    except OSError:
+        if network:
+            raise HistoryStorageUnavailable(NETWORK_NG_MESSAGE) from None
+        raise HistoryStorageUnavailable(PERMISSION_NG_MESSAGE) from None
     share = _unc_share_root(path)
     if share and not Path(share).is_dir():
         raise HistoryStorageUnavailable(NETWORK_NG_MESSAGE)
@@ -155,10 +160,10 @@ def validate_data_root(raw_path: str, create_missing: bool = False) -> tuple[boo
         detail = str(exc)
         if detail in (PERMISSION_NG_MESSAGE, NETWORK_NG_MESSAGE) or detail.startswith("保存先フォルダを作成できません"):
             return False, detail
-        if "権限がありません" in detail:
-            return False, f"{PERMISSION_NG_MESSAGE}\n詳細: {detail}"
         if _is_network_path(path):
             return False, f"{NETWORK_NG_MESSAGE}\n詳細: {detail}"
+        if "権限がありません" in detail:
+            return False, f"{PERMISSION_NG_MESSAGE}\n詳細: {detail}"
         return False, f"{CONNECTION_NG_MESSAGE}\n詳細: {detail}"
     return True, CONNECTION_OK_MESSAGE + _free_space_note(path)
 
@@ -229,6 +234,92 @@ def current_data_root(config_file: Path) -> str | None:
 
 SITE_MARKER_FILENAME = ".ky_site.json"
 
+MARKER_MISSING = "missing"
+MARKER_INVALID = "invalid"
+MARKER_VALID = "valid"
+
+
+def inspect_site_marker(root: Path) -> tuple[str, dict[str, str] | None]:
+    """マーカーの正常・欠損・破損を区別して読み取る。"""
+    marker = root / SITE_MARKER_FILENAME
+    if not marker.exists():
+        return MARKER_MISSING, None
+    try:
+        if not marker.is_file():
+            return MARKER_INVALID, None
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return MARKER_INVALID, None
+    if not isinstance(data, dict):
+        return MARKER_INVALID, None
+    project_id = str(data.get("project_id") or "").strip()
+    if not project_id:
+        return MARKER_INVALID, None
+    project_name = str(data.get("project_name") or "").strip()
+    if project_name == DEFAULT_PROJECT_NAME:
+        project_name = ""
+    return MARKER_VALID, {"project_id": project_id, "project_name": project_name}
+
+
+def inspect_record_project_ids(root: Path) -> tuple[bool, set[str]]:
+    """records内に履歴JSONがあるかと、読み取れた工事IDの集合を返す。
+
+    読み取り専用の検査であり、履歴ファイルの移動・修復・上書きは行わない。
+    """
+    records = root / "records"
+    if not records.is_dir():
+        return False, set()
+    has_records = False
+    project_ids: set[str] = set()
+    try:
+        paths = records.rglob("*.json")
+        for path in paths:
+            has_records = True
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict):
+                project_id = data.get("project_id")
+                if isinstance(project_id, str) and project_id.strip():
+                    project_ids.add(project_id.strip())
+    except OSError:
+        # recordsの列挙自体に失敗した場合も「空」とはみなさず保護側へ倒す。
+        return True, project_ids
+    return has_records, project_ids
+
+
+def storage_protection_issue(root: Path) -> tuple[str | None, dict[str, str] | None]:
+    """既存データを自動変更してはいけない状態なら、利用者向け理由を返す。"""
+    marker_status, marker = inspect_site_marker(root)
+    has_records, record_project_ids = inspect_record_project_ids(root)
+    if len(record_project_ids) > 1:
+        return (
+            "この保存先の既存履歴に複数の工事IDが混在しています。自動判定や変更は行いません。"
+            "既存データを保護するため、管理者に確認してください。",
+            marker,
+        )
+    if marker_status == MARKER_INVALID:
+        return (
+            ".ky_site.jsonが破損しているため設定を保存できません。自動上書きは行いません。"
+            "既存データを保護するため、管理者に確認してください。",
+            None,
+        )
+    if marker_status == MARKER_MISSING and has_records:
+        found = next(iter(record_project_ids), "不明")
+        return (
+            f".ky_site.jsonが見つかりませんが、既存の解析履歴があります（履歴の工事ID: {found}）。"
+            "新しい工事IDでマーカーは作成しません。管理者に確認してください。",
+            None,
+        )
+    if marker and record_project_ids and marker["project_id"] not in record_project_ids:
+        return (
+            f".ky_site.jsonの工事ID（{marker['project_id']}）と既存履歴の工事ID"
+            f"（{next(iter(record_project_ids))}）が一致しません。自動修正は行いません。管理者に確認してください。",
+            marker,
+        )
+    return None, marker
+
 
 def read_site_marker(root: Path) -> dict[str, str] | None:
     """保存先(NAS等)に既に記録されている現場情報(現場ID・現場名)を読み取る。
@@ -237,39 +328,30 @@ def read_site_marker(root: Path) -> dict[str, str] | None:
     値がずれてしまう(誤入力・表記ゆれ)のを防ぐため、最初にその保存先を設定した
     PCが書き込む目印ファイルを参照する。見つからない/壊れている場合はNone。
     """
-    marker = root / SITE_MARKER_FILENAME
-    try:
-        if not marker.is_file():
-            return None
-        data = json.loads(marker.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    project_id = str(data.get("project_id") or "").strip()
-    if not project_id:
-        return None
-    project_name = str(data.get("project_name") or "").strip()
-    if project_name == DEFAULT_PROJECT_NAME:
-        # 現場名未入力のときの仮の既定値。利用者が入力した正式な現場名を上書きさせない。
-        project_name = ""
-    return {"project_id": project_id, "project_name": project_name}
+    status, marker = inspect_site_marker(root)
+    return marker if status == MARKER_VALID else None
 
 
-def write_site_marker(root: Path, project_id: str, project_name: str) -> None:
-    """保存先へ現場情報の目印ファイルを書き込む(既存なら上書き)。
+def write_site_marker(root: Path, project_id: str, project_name: str) -> bool:
+    """保存先へ現場情報の目印ファイルを書き込む（既存なら変更しない）。
 
-    他PCの現場ID/現場名の自動検出のためだけの補助情報であり、失敗しても
-    アプリの動作に支障はないため、書き込めなくてもログのみで握り潰す。
+    既存マーカーは正常・破損を問わず上書きしない。新規作成に失敗した場合は
+    既存設定との互換性を保つためログへ記録し、呼び出し元には成否を返す。
     """
     marker = root / SITE_MARKER_FILENAME
+    if marker.exists():
+        return False
     payload = json.dumps({"project_id": project_id, "project_name": project_name}, ensure_ascii=False, indent=2) + "\n"
     temp = root / f".{uuid.uuid4().hex}.ky_site.tmp"
     try:
         temp.write_text(payload, encoding="utf-8")
+        if marker.exists():
+            return False
         os.replace(temp, marker)
+        return True
     except OSError as exc:
         logger.warning("現場情報マーカー（%s）の書き込みに失敗しました: %s", marker, exc)
+        return False
     finally:
         try:
             temp.unlink(missing_ok=True)
@@ -288,7 +370,7 @@ def apply_setup(
 
     順序: 入力検証 → 保存先の確認 → 既存の現場情報との照合 → サブフォルダ/履歴保存領域の
     初期化(HistoryRepository.initialize_schemaを再利用) → config.json保存(完了フラグ付き)
-    → 現場情報マーカー書き込み。config.jsonは最後にアトミックに書くため、途中で失敗しても
+    → 新規フォルダの場合のみ現場情報マーカー作成。config.jsonはアトミックに書くため、途中で失敗しても
     「セットアップ完了」状態にはならず、既存の設定も壊れない。
     戻り値: (成功したか, 利用者向け日本語メッセージ)
     """
@@ -297,15 +379,20 @@ def apply_setup(
     raw = read_raw_config(config_file)
     local_project_id = str(raw.get("project_id") or "").strip()
     previous_root = str(raw.get("data_root") or "").strip()
+    project_id_locked = bool(local_project_id and previous_root and raw.get("setup_completed", True) is not False)
 
     ok, message = validate_project_name(project_name or "")
     if not ok:
         return False, message
-    # 設定画面からはproject_idも変更できる。未入力の場合のみ既存値を引き継ぐ。
     requested_id = (project_id or "").strip() or local_project_id
     ok, message = validate_project_id(requested_id)
     if not ok:
         return False, message
+    if project_id_locked and requested_id != local_project_id:
+        return False, (
+            f"工事IDは設定確定後に変更できません（現在の工事ID: {local_project_id}）。"
+            "既存履歴を保護するため、工事名のみ変更できます。"
+        )
     if storage_type:
         ok, message = validate_storage_type(storage_type)
         if not ok:
@@ -316,19 +403,21 @@ def apply_setup(
         return False, message
 
     target = normalize_path(raw_path)
-    same_root_as_current = bool(previous_root) and normalize_path(previous_root) == target
-    marker = read_site_marker(target)
+    marker_status, marker = inspect_site_marker(target)
+    protection_issue, marker = storage_protection_issue(target)
+    if protection_issue:
+        return False, protection_issue
     detected_note = ""
     project_id = requested_id
     if marker:
-        if local_project_id and not same_root_as_current and marker["project_id"] != requested_id:
+        if project_id_locked and requested_id != marker["project_id"]:
             return False, (
                 f"この保存先には既に別の現場（現場ID: {marker['project_id']}、"
                 f"現場名: {marker['project_name'] or '不明'}）のデータがあります。"
                 f"入力された現場ID（{requested_id}）と一致しません。"
                 "保存先のフォルダを間違えていないかご確認ください。"
             )
-        if not local_project_id:
+        if not project_id_locked:
             # 初回設定時は、手入力の値より保存先に既にある現場情報を優先する
             # (複数PCで現場ID・現場名がずれるのを防ぐため)。
             project_id = marker["project_id"]
@@ -352,7 +441,8 @@ def apply_setup(
             f"設定ファイル（{config_file}）を保存できませんでした。アプリのフォルダへの書き込み権限と"
             f"空き容量を確認してください。設定は変更されていません。詳細: {exc}"
         )
-    write_site_marker(target, final_id, final_name)
+    if marker_status == MARKER_MISSING:
+        write_site_marker(target, final_id, final_name)
     return True, message + detected_note
 
 

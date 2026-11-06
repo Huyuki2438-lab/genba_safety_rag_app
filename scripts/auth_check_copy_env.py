@@ -10,10 +10,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from copy_env_loader import COPY_ENV, load_copy_env  # noqa: E402
+from copy_env_loader import COPY_ENV, apply_copy_env_to_config  # noqa: E402
 
-loaded = load_copy_env()
-from backend.app.core.config import settings  # noqa: E402
+import backend.app.core.config as config  # noqa: E402
+
+loaded, settings = apply_copy_env_to_config(config)
 from backend.app.core.ai.base import extract_auth_diagnostics  # noqa: E402
 
 key = settings.VERTEX_API_KEY

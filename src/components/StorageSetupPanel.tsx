@@ -41,7 +41,7 @@ const validateFields = (projectId: string, projectName: string, path: string, st
   const dir = path.trim();
   if (!dir) errors.path = "データ保存先を入力または選択してください。";
   else if (!/^([a-zA-Z]:[\\/]|\\\\|\/\/)/.test(dir)) {
-    errors.path = "絶対パスで指定してください（例: C:\\KY安全管理\\data　または　\\\\NAS\\共有\\data）。";
+    errors.path = "工事フォルダそのものを絶対パスで指定してください（例: C:\\KY安全管理\\001_芝原改良工事　または　\\\\NAS\\共有\\KY安全管理\\001_芝原改良工事）。";
   }
   if (storageType !== "local" && storageType !== "nas") errors.storageType = "保存先種別を選択してください。";
   return errors;
@@ -85,8 +85,8 @@ export function StorageSetupPanel({
   const isChangingDataRoot =
     mode === "change" && previousDataRoot !== "" && path.trim() !== "" && path.trim() !== previousDataRoot;
   const isNetworkPath = path.trim().startsWith("\\\\") || path.trim().startsWith("//");
-  // 設定画面(change)ではプロジェクト番号も変更できる。初回設定では、保存先に既存の現場情報があればそれを使う。
-  const projectIdIsLocked = mode === "initial" && (projectIdLocked || detectedFromStorage);
+  // 設定確定後の工事IDは履歴との対応キーなので、設定画面でも変更させない。
+  const projectIdIsLocked = projectIdLocked || detectedFromStorage;
   const canSave = !busy && (!isChangingDataRoot || migrationAcked);
   const clearFieldError = (key: keyof FieldErrors): void => setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
   const fieldError = (key: keyof FieldErrors) =>
@@ -229,9 +229,9 @@ export function StorageSetupPanel({
         <span className="setup-wizard__help">保存フォルダ名などに使用する工事番号を入力してください。例：003</span>
       </label>
       {fieldError("projectId")}
-      {mode === "change" && (initialProjectId ?? "").trim() !== "" && projectId.trim() !== (initialProjectId ?? "").trim() && (
+      {projectIdLocked && (
         <p className="setup-wizard__hint">
-          プロジェクト番号を変更すると、これまでの履歴は別のプロジェクトのものとして扱われ、一覧に表示されなくなります。
+          工事IDは既存履歴を識別するため、設定確定後は変更できません。工事名は下の欄で変更できます。
         </p>
       )}
       {mode === "initial" && detectedFromStorage && (
@@ -272,14 +272,14 @@ export function StorageSetupPanel({
               clearFieldError("path");
               syncStorageTypeWithPath(event.target.value);
             }}
-            placeholder="例：C:\KY安全管理\001_芝原改良工事\data　または　\\NAS\共有\KY安全管理\data"
+            placeholder="例：C:\KY安全管理\001_芝原改良工事　または　\\NAS\共有\KY安全管理\001_芝原改良工事"
             disabled={busy}
           />
           <button type="button" className="compact" onClick={() => void handleBrowse()} disabled={busy}>
             {isBrowsing ? "選択中..." : "参照..."}
           </button>
         </div>
-        <span className="setup-wizard__help">KY履歴・写真・PDFなどを保存するフォルダを指定してください。</span>
+        <span className="setup-wizard__help">dataフォルダではなく、工事フォルダそのものを指定してください。直下のrecords・images・reports・export・usageに保存します。</span>
       </label>
       {fieldError("path")}
 

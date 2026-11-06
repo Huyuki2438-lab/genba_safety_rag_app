@@ -62,7 +62,7 @@
     {
       "project_id": "001",
       "project_name": "芝原改良工事",
-      "data_root": "I:\\マイドライブ\\KY安全管理\\001_芝原改良工事\\data"
+      "data_root": "I:\\マイドライブ\\KY安全管理\\001_芝原改良工事"
     }
 
   ・data_root が空、または config.json が無い状態で起動すると、
@@ -72,11 +72,13 @@
 ----------------------------------------------------------------
 4. データの想定保存先
 ----------------------------------------------------------------
-4-1. 共有データ保存先（data_root ＝ 現場ごとのdataフォルダ）
+4-1. 共有データ保存先（data_root ＝ 工事フォルダそのもの）
   配布時の初期値:
-    I:\マイドライブ\KY安全管理\001_芝原改良工事\data
+    I:\マイドライブ\KY安全管理\001_芝原改良工事
   ※ローカルフォルダ（例 C:\KYデータ）やNASのUNCパス
     （例 \\サーバー名\共有名\フォルダ）も指定可能です。
+  ※末尾にdataを付けず、工事フォルダそのものを指定します。
+    既存のdata方式の設定は自動変更・移行しません。
 
   data_root 配下の構成:
     records\YYYY-MM\{ID}.json   KY解析の履歴1件ごとのJSON
@@ -86,11 +88,13 @@
     images\YYYY\MM\{ID}.jpg 等  アップロードされた写真
     reports\{ID}\               生成したPDF・Excelレポート
     export\                     履歴をZIPで書き出したファイル
+    usage\YYYY-MM\{ID}.json     利用台帳
+    .ky_site.json               現場ID・現場名のマーカー
 
   ・NAS/共有ドライブは「データ保管」だけを担当します。
     EXE・secrets.env・APIキー・ログは置きません。
-  ・バックアップは現場フォルダ全体（records / images / reports / export
-    と削除印）が対象です。recordsだけでは写真・PDFを復元できません。
+  ・バックアップは工事フォルダ全体（records / images / reports / export /
+    usage / .ky_site.json と削除印）が対象です。recordsだけでは写真・PDFを復元できません。
   ・保存先に接続できない場合、アプリは終了せず、履歴の読込・保存・削除時に
     「共有データへ接続できません」等のメッセージを表示します。
     復旧後に再度操作してください。
@@ -119,7 +123,8 @@
 ----------------------------------------------------------------
   [ ] 各PCに secrets.env が配置され、VERTEX_API_KEY が設定済み
   [ ] config.json の data_root が正しい現場フォルダを指している
-  [ ] data_root 配下に records / images / reports / export がある
+  [ ] data_root 配下に records / images / reports / export / usage がある
+  [ ] 工事フォルダ直下に不要な data フォルダが新規作成されていない
   [ ] secrets.env がNAS・Git・メール等に出ていない
   [ ] 現場フォルダ全体が定期バックアップ対象になっている
   [ ] APIキーの管理者・再発行手順が決まっている

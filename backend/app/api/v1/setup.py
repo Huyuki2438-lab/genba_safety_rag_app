@@ -21,7 +21,7 @@ from backend.app.core.storage_setup import (
     normalize_storage_type,
     open_folder_dialog,
     read_raw_config,
-    read_site_marker,
+    storage_protection_issue,
     validate_data_root,
 )
 from backend.app.schemas.setup import (
@@ -59,7 +59,8 @@ async def get_status() -> SetupStatusResponse:
         reachable_message=reachable_message,
         project_id=project_id,
         project_name=(str(raw.get("project_name") or "").strip() or None),
-        project_id_locked=False,
+        project_id_locked=bool(project_id and str(raw.get("data_root") or "").strip()
+                               and raw.get("setup_completed", True) is not False),
     )
 
 
@@ -89,7 +90,9 @@ async def validate(req: DataRootRequest) -> DataRootCheckResponse:
     ok, message = await run_in_threadpool(validate_data_root, req.path, True)
     detected = None
     if ok:
-        detected = await run_in_threadpool(read_site_marker, normalize_path(req.path))
+        issue, detected = await run_in_threadpool(storage_protection_issue, normalize_path(req.path))
+        if issue:
+            ok, message = False, issue
     return DataRootCheckResponse(
         ok=ok,
         message=message,

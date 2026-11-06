@@ -228,10 +228,10 @@ class SiteMarkerTests(unittest.TestCase):
         marker = read_site_marker(self.root)
         self.assertEqual(marker, {"project_id": "004", "project_name": "テスト工区"})
 
-    def test_write_overwrites_existing_marker(self):
+    def test_write_does_not_overwrite_existing_marker(self):
         write_site_marker(self.root, "004", "旧名称")
         write_site_marker(self.root, "004", "新名称")
-        self.assertEqual(read_site_marker(self.root)["project_name"], "新名称")
+        self.assertEqual(read_site_marker(self.root)["project_name"], "旧名称")
 
     def test_corrupt_marker_is_ignored(self):
         (self.root / ".ky_site.json").write_text("{not json", encoding="utf-8")
@@ -309,23 +309,24 @@ class ApplySetupTests(unittest.TestCase):
         self.assertEqual(read_raw_config(self.config_file), original)
         self.assertEqual([p.name for p in self.base.iterdir() if p.name.endswith(".tmp")], [])
 
-    def test_settings_change_updates_project_id_and_keeps_existing_data(self):
+    def test_settings_change_keeps_project_id_and_existing_data(self):
         self.assertTrue(apply_setup(self.config_file, str(self.data_dir), "010", "旧名")[0])
         (self.data_dir / "records" / "keep.json").write_text("{}", encoding="utf-8")
         other = self.base / "other"
         other.mkdir()
-        ok, message = apply_setup(self.config_file, str(other), "999", "新名")
+        ok, message = apply_setup(self.config_file, str(other), "010", "新名")
         self.assertTrue(ok, message)
         raw = read_raw_config(self.config_file)
-        self.assertEqual((raw["project_id"], raw["project_name"], raw["data_root"]), ("999", "新名", str(other)))
+        self.assertEqual((raw["project_id"], raw["project_name"], raw["data_root"]), ("010", "新名", str(other)))
         self.assertTrue((self.data_dir / "records" / "keep.json").exists())
 
-    def test_project_id_change_on_same_data_root_updates_marker(self):
+    def test_project_id_change_on_same_data_root_is_rejected(self):
         self.assertTrue(apply_setup(self.config_file, str(self.data_dir), "010", "A", "local")[0])
         ok, message = apply_setup(self.config_file, str(self.data_dir), "011", "A", "local")
-        self.assertTrue(ok, message)
-        self.assertEqual(read_raw_config(self.config_file)["project_id"], "011")
-        self.assertEqual(read_site_marker(self.data_dir)["project_id"], "011")
+        self.assertFalse(ok)
+        self.assertIn("変更できません", message)
+        self.assertEqual(read_raw_config(self.config_file)["project_id"], "010")
+        self.assertEqual(read_site_marker(self.data_dir)["project_id"], "010")
 
     def test_invalid_storage_type_rejected(self):
         ok, message = apply_setup(self.config_file, str(self.data_dir), "1", "x", "ftp")

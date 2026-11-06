@@ -1,4 +1,4 @@
-"""開発用起動: コピー.env を明示的に読み込んで別ポートでAPIを起動する。通常起動(.env)には影響しない。
+r"""開発用起動: コピー.env を明示的に読み込んで別ポートでAPIを起動する。通常起動(.env)には影響しない。
 使い方: .venv\Scripts\python scripts\run_dev_copy_env.py [--port 8765]
 """
 from __future__ import annotations
@@ -8,12 +8,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from copy_env_loader import load_copy_env  # noqa: E402
+from copy_env_loader import apply_copy_env_to_config  # noqa: E402
 
 port = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 8765
 if port == 8000:
     raise SystemExit("8000番は既存サーバー用のため使用できません。")
-print("loaded:", load_copy_env())  # 値は出力しない
+import backend.app.core.config as config  # noqa: E402
+
+loaded, _settings = apply_copy_env_to_config(config)
+print("loaded:", loaded)  # 値は出力しない
 import uvicorn  # noqa: E402
 
 from main import create_app  # noqa: E402

@@ -1,8 +1,10 @@
-"""Assemble the company-only deployment; never print secrets or overwrite NAS data."""
+"""Assemble a new company-only deployment without exposing credentials."""
+import argparse
 from pathlib import Path
 import json
-import os
+import re
 import shutil
+import uuid
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +17,17 @@ DOCS = DIST / "04_管理者向け資料"
 PROMPTS_SRC = ROOT / "backend" / "app" / "core" / "prompts" / "templates"
 PROMPTS_DIST = DOCS / "AIプロンプト"
 PRICING_SRC = ROOT / "settings" / "usage_pricing.json"
+COPY_ENV = ROOT / "コピー.env"
+SECRET_FIELDS = (
+    "VERTEX_API_KEY",
+    "GEMINI_MODEL",
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_LOCATION",
+)
+_API_KEY_PATTERN = re.compile(r"[A-Za-z0-9._~!$%&()*+,\-/:;=?@\[\]^`{|}]{20,200}")
+_MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{1,127}")
+_PROJECT_PATTERN = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]")
+_LOCATION_PATTERN = re.compile(r"[a-z][a-z0-9-]{1,62}[a-z0-9]")
 NAS_UNC_ROOT = r"I:\マイドライブ\KY安全管理"
 SITE_FOLDERS = ("export", "images", "records", "reports", "usage")
 DEFAULT_DATA_ROOT = NAS_UNC_ROOT + r"\001_芝原改良工事"
@@ -22,6 +35,7 @@ DEFAULT_DATA_ROOT = NAS_UNC_ROOT + r"\001_芝原改良工事"
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text.strip() + "\n", encoding="utf-8-sig")
+
 
 def create_site_structure(path, project_id=None, project_name=None):
     """Create a new distribution skeleton without nesting it under data/."""
@@ -37,12 +51,14 @@ def create_site_structure(path, project_id=None, project_name=None):
         if not marker_path.exists():
             marker_path.write_text(marker, encoding="utf-8")
 
+
 def default_config():
     return {
         "project_id": "001",
         "project_name": "芝原改良工事",
         "data_root": DEFAULT_DATA_ROOT,
     }
+
 
 def install_pricing_config(pc_dir, source=PRICING_SRC):
     """Install the app-wide pricing file without replacing an existing one."""
@@ -55,18 +71,70 @@ def install_pricing_config(pc_dir, source=PRICING_SRC):
         shutil.copy2(source, target)
     return target
 
-def main():
-    env = {**dotenv_values(ROOT / ".env"), **{k: v for k, v in os.environ.items() if k.startswith(("VERTEX_", "GEMINI_", "GOOGLE_CLOUD_"))}}
-    key = env.get("VERTEX_API_KEY")
-    if not key or key.startswith("<"):
-        raise SystemExit("Existing real Vertex AI API key was not found; package not created")
-    if not env.get("GOOGLE_CLOUD_PROJECT"):
-        raise SystemExit("GOOGLE_CLOUD_PROJECT was not found; package not created")
+
+def load_distribution_secrets(source=COPY_ENV):
+    """Read and validate deploy-time settings without logging their values."""
+    source = Path(source)
+    if not source.is_file():
+        raise ValueError(f"Secrets source file was not found: {source.name}")
+    values = dotenv_values(source, interpolate=False)
+    missing = [name for name in SECRET_FIELDS if not (values.get(name) or "").strip()]
+    if missing:
+        raise ValueError("Required settings are missing from secrets source: " + ", ".join(missing))
+
+    clean = {name: values[name].strip() for name in SECRET_FIELDS}
+    key = clean["VERTEX_API_KEY"]
+    placeholder = key.startswith("<") or key.lower() in {
+        "changeme", "replace-me", "your-api-key", "your_api_key"
+    }
+    if placeholder or not _API_KEY_PATTERN.fullmatch(key):
+        raise ValueError("VERTEX_API_KEY has an invalid format")
+    if not _MODEL_PATTERN.fullmatch(clean["GEMINI_MODEL"]):
+        raise ValueError("GEMINI_MODEL has an invalid format")
+    if not _PROJECT_PATTERN.fullmatch(clean["GOOGLE_CLOUD_PROJECT"]):
+        raise ValueError("GOOGLE_CLOUD_PROJECT has an invalid format")
+    if not _LOCATION_PATTERN.fullmatch(clean["GOOGLE_CLOUD_LOCATION"]):
+        raise ValueError("GOOGLE_CLOUD_LOCATION has an invalid format")
+    return clean
+
+
+def write_secrets_env(pc_dir, values):
+    """Create secrets.env once; callers must supply a new staging directory."""
+    target = Path(pc_dir) / "secrets.env"
+    if target.exists():
+        raise FileExistsError("Refusing to overwrite secrets.env")
+    content = "".join(f"{name}={values[name]}\n" for name in SECRET_FIELDS)
+    target.write_text(content, encoding="utf-8")
+    return target
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Assemble a new distribution candidate from コピー.env."
+    )
+    parser.add_argument(
+        "--distribution-output",
+        required=True,
+        type=Path,
+        help="Path for a new distribution candidate; an existing path is rejected.",
+    )
+    return parser.parse_args(argv)
+
+
+def _assemble_into(stage, env):
+    global DIST, NAS, PC, MANUAL_DIST, DOCS, PROMPTS_DIST
+    DIST = stage
+    NAS = DIST / "01_NASへ配置"
+    PC = DIST / "02_各PCへ配置"
+    MANUAL_DIST = DIST / "03_マニュアル"
+    DOCS = DIST / "04_管理者向け資料"
+    PROMPTS_DIST = DOCS / "AIプロンプト"
+
     binary = ROOT / "build" / "portable" / "KY安全管理.exe"
     if not binary.is_file():
-        raise SystemExit("Build EXE first")
+        raise FileNotFoundError("Build EXE first")
     if not PROMPTS_SRC.is_dir():
-        raise SystemExit("Gemini prompt templates not found")
+        raise FileNotFoundError("Gemini prompt templates not found")
     create_site_structure(NAS / "001_芝原改良工事", "001", "芝原改良工事")
     # The template has no marker because its site ID/name are assigned after it is copied.
     create_site_structure(NAS / "template_project")
@@ -80,7 +148,7 @@ def main():
     # User manual (PDF only) shipped beside the other distribution folders.
     manual = MANUAL_SRC / "現場KYアシスト_利用マニュアル.pdf"
     if not manual.is_file():
-        raise SystemExit("User manual PDF not found in 利用マニュアル")
+        raise FileNotFoundError("User manual PDF not found in 利用マニュアル")
     MANUAL_DIST.mkdir(parents=True, exist_ok=True)
     for stale in MANUAL_DIST.glob("現場KYアシスト_利用マニュアル.html"):
         stale.unlink()
@@ -88,12 +156,7 @@ def main():
     # Preserve per-site configuration on subsequent builds.
     if not (PC / "config.json").exists():
         write(PC / "config.json", json.dumps(default_config(), ensure_ascii=False, indent=2))
-    secret = "VERTEX_API_KEY=" + key + "\n"
-    for name in ("GEMINI_MODEL", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
-        if env.get(name):
-            secret += name + "=" + env[name] + "\n"
-    # dotenv expects UTF-8 without BOM.
-    (PC / "secrets.env").write_text(secret, encoding="utf-8")
+    write_secrets_env(PC, env)
     write(PC / "README.txt", """
 【KY安全管理 使用方法】
 1. この「02_各PCへ配置」内のファイルを各PCのローカルディスクの任意のフォルダへコピーします。
@@ -208,6 +271,39 @@ secrets.envを画面共有・メール・公開リポジトリへ掲載しない
     print("AI prompt files copied:", len(list(PROMPTS_DIST.glob('*.jinja2'))))
     print("PC package files:", len(list(PC.iterdir())))
     print("PC package MiB:", round(sum(p.stat().st_size for p in PC.rglob('*') if p.is_file()) / 1024**2, 2))
+
+
+def assemble_distribution(output, secrets_source=COPY_ENV):
+    """Build in a temporary sibling and publish only after full success."""
+    output = Path(output).resolve()
+    if output.exists():
+        raise FileExistsError(f"Distribution output already exists: {output}")
+
+    # Validate credentials before creating output. Deliberately do not consult
+    # .env, existing secrets.env files, or process environment variables.
+    env = load_distribution_secrets(secrets_source)
+    stage = output.parent / f".{output.name}.assembling-{uuid.uuid4().hex}"
+    try:
+        _assemble_into(stage, env)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if output.exists():
+            raise FileExistsError(f"Distribution output already exists: {output}")
+        stage.replace(output)
+    except Exception:
+        if stage.exists():
+            shutil.rmtree(stage)
+        raise
+    return output
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    try:
+        output = assemble_distribution(args.distribution_output)
+    except (ValueError, FileNotFoundError, FileExistsError, OSError) as exc:
+        raise SystemExit(f"Distribution package was not created: {exc}") from None
+    print("Distribution candidate created:", output)
+
 
 if __name__ == "__main__":
     main()
